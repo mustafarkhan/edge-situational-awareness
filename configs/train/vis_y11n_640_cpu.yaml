@@ -1,0 +1,17 @@
+# CPU-only fine-tune actually run for the first published results (no GPU was available).
+# Short on purpose: the point is to measure what a little in-domain training buys over
+# COCO-pretrained weights, not to reach the best possible VisDrone score.
+# Two training sequences (9999951, 9999955) were moved to datasets/demo_holdout BEFORE training,
+# so the tracking demo runs on frames the model never saw.
+model: weights/yolo11n.pt
+data: configs/datasets/visdrone.yaml
+imgsz: 640
+epochs: 3
+batch: 8
+workers: 2
+device: cpu
+val: false                 # we evaluate afterwards with training/evaluate_zeroshot.py (same metric as the baseline)
+plots: false
+project: runs/vis
+name: y11n_640_cpu_3ep
+exist_ok: true

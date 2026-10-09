@@ -1,0 +1,11 @@
+# Training / evaluation machine (desktop GPU or cloud). Pin exact versions once things work,
+# then record them in the README so your results are reproducible.
+ultralytics>=8.3
+sahi>=0.11
+pycocotools>=2.0.7
+matplotlib
+pandas
+tabulate
+pyyaml
+tqdm
+wandb          # optional: experiment tracking

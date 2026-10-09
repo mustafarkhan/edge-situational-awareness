@@ -1,0 +1,14 @@
+# Experiment: augmentation for overhead sea imagery. ONE change vs sds_y11s_1280.
+# Overhead views have no natural 'up', so vertical flips are valid here (they would not be
+# for a street-level camera). Stronger brightness jitter imitates glare and dusk.
+model: yolo11s.pt
+data: configs/datasets/seadronessee.yaml
+imgsz: 1280
+epochs: 100
+patience: 20
+batch: 8
+flipud: 0.5
+hsv_v: 0.6                 # default 0.4
+degrees: 10.0              # small rotations; large ones inflate axis-aligned boxes
+project: runs/sds
+name: y11s_1280_aug
