@@ -1,0 +1,9 @@
+# Baseline 1: smallest model, default resolution. Your reference point for everything else.
+model: yolo11n.pt          # COCO-pretrained weights (transfer learning)
+data: configs/datasets/seadronessee.yaml
+imgsz: 640
+epochs: 100
+patience: 20               # early stop if val mAP stops improving
+batch: 16
+project: runs/sds
+name: y11n_640

@@ -1,0 +1,9 @@
+# Land-vehicle module baseline on VisDrone.
+model: yolo11s.pt
+data: configs/datasets/visdrone.yaml
+imgsz: 640
+epochs: 100
+patience: 20
+batch: 16
+project: runs/vis
+name: y11s_640

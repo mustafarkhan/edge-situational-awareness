@@ -1,0 +1,23 @@
+# data and outputs never go in git
+datasets/
+runs/
+*.pt
+*.onnx
+*.engine
+*.cache
+wandb/
+mlruns/
+outputs/
+__pycache__/
+*.egg-info/
+.venv/
+node_modules/
+web/frontend/dist/
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+*.mp4
+*.jsonl
+!docs/figures/.gitkeep
+weights/
+datasets/

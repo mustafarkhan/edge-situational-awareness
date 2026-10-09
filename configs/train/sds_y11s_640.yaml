@@ -1,0 +1,9 @@
+# Baseline 2: one size up. Same everything else, so the difference is the model only.
+model: yolo11s.pt
+data: configs/datasets/seadronessee.yaml
+imgsz: 640
+epochs: 100
+patience: 20
+batch: 16
+project: runs/sds
+name: y11s_640

@@ -1,0 +1,9 @@
+# Experiment: higher input resolution for small objects. ONE change vs sds_y11s_640.
+model: yolo11s.pt
+data: configs/datasets/seadronessee.yaml
+imgsz: 1280
+epochs: 100
+patience: 20
+batch: 8                   # 4x the pixels -> halve the batch (or more) to fit GPU memory
+project: runs/sds
+name: y11s_1280

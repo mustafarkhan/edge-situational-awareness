@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>esa_ros</name>
+  <version>0.1.0</version>
+  <description>Detection and tracking node for edge situational awareness</description>
+  <maintainer email="you@example.com">Your Name</maintainer>
+  <license>AGPL-3.0</license>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>vision_msgs</exec_depend>
+  <export><build_type>ament_python</build_type></export>
+</package>
