@@ -30,5 +30,7 @@ jobs:
         run: |
           source /opt/ros/humble/setup.bash
           cd ros2_ws && colcon build --symlink-install
-      - name: Run the node and check its topics
+      - name: Run the node and check its topics (camera straight down)
         run: bash ros2_ws/test_node.sh
+      - name: Run the node and check its topics (gimbal tilted 45 degrees, tilt-aware geolocation)
+        run: PITCH=45.0 bash ros2_ws/test_node.sh

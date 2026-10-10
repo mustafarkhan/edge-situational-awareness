@@ -8,6 +8,7 @@ source /opt/ros/humble/setup.bash
 source "$(dirname "$0")/install/setup.bash"
 OUT=$(mktemp -d)
 MODEL=${MODEL:-yolo11n.pt}
+PITCH=${PITCH:-90.0}  # gimbal pitch below the horizon: 90 = straight down; e.g. 45 tests the tilt-aware geolocation
 mkdir -p "$OUT/frames"
 for img in bus zidane; do  # Ultralytics' standard sample images (people + vehicles)
   curl -fsSL -o "$OUT/$img.jpg" "https://ultralytics.com/images/$img.jpg" ||
@@ -16,7 +17,7 @@ done
 for i in $(seq -w 1 15); do
   cp "$OUT/bus.jpg" "$OUT/frames/${i}a.jpg" && cp "$OUT/zidane.jpg" "$OUT/frames/${i}b.jpg" || exit 1
 done
-echo "frames: $(ls "$OUT/frames" | wc -l)  model: $MODEL"
+echo "frames: $(ls "$OUT/frames" | wc -l)  model: $MODEL  pitch: $PITCH"
 [ "$(ls "$OUT/frames" | wc -l)" -eq 30 ] || { echo "::error title=setup::sample images missing"; exit 1; }
 
 annotate() {  # level title file: one annotation with the file's first 60 lines
@@ -28,8 +29,9 @@ annotate() {  # level title file: one annotation with the file's first 60 lines
 # Message types are given explicitly: without them, `ros2 topic echo` exits at once if the topic
 # does not exist yet, and these subscribers start before the node.
 declare -A TYPES=([detections]=vision_msgs/msg/Detection2DArray [tracks_geo]=std_msgs/msg/String [alerts]=std_msgs/msg/String)
+# --full-length: echo otherwise cuts strings at 128 characters, hiding the per-object coordinates
 for t in detections tracks_geo; do
-  timeout 300 ros2 topic echo --once "/$t" "${TYPES[$t]}" > "$OUT/$t.txt" 2>&1 &
+  timeout 300 ros2 topic echo --once --full-length "/$t" "${TYPES[$t]}" > "$OUT/$t.txt" 2>&1 &
 done
 # alerts are latched (transient local): subscribe with matching QoS, so alerts published before
 # this subscriber finished connecting are still delivered, as they would be to a late ground station
@@ -39,7 +41,7 @@ sleep 3
 timeout 300 ros2 run esa_ros detector_node --ros-args \
   -p model:="$MODEL" -p source:="$OUT/frames" -p imgsz:=640 -p conf:=0.25 \
   -p alert_labels:="['person']" -p alert_min_frames:=1 \
-  -p lat:=60.15 -p lon:=24.95 -p alt_m:=60.0 -p hfov_deg:=70.0 > "$OUT/node.log" 2>&1
+  -p lat:=60.15 -p lon:=24.95 -p alt_m:=60.0 -p hfov_deg:=70.0 -p pitch_deg:="$PITCH" > "$OUT/node.log" 2>&1
 NODE_RC=$?
 echo "node exit code: $NODE_RC"
 sleep 2
@@ -55,9 +57,17 @@ for t in detections tracks_geo alerts; do
     echo "FAIL /$t received nothing"; annotate error "/$t received nothing" "$OUT/$t.txt"; fail=1
   fi
 done
+# geolocation must produce real coordinates (latitude ~60.1x), not only null positions
+# (an object's latitude has 7 decimals; the drone's own is 60.15, so it cannot match)
+if grep -qE '"lat": 60\.1[45][0-9]{4}' "$OUT/tracks_geo.txt"; then
+  echo "OK   /tracks_geo has geolocated objects (pitch $PITCH)"
+else
+  echo "FAIL /tracks_geo has no geolocated objects (pitch $PITCH)"
+  annotate error "no geolocated objects (pitch $PITCH)" "$OUT/tracks_geo.txt"; fail=1
+fi
 if [ "$NODE_RC" != 0 ] || grep -q "terminate called\|Aborted" "$OUT/node.log"; then
   echo "FAIL node did not exit cleanly (code $NODE_RC)"; fail=1
 fi
-annotate "$([ $fail = 0 ] && echo notice || echo error)" "node log (last 40 lines) - exit code $NODE_RC" "$OUT/node_tail.log"
+annotate "$([ $fail = 0 ] && echo notice || echo error)" "node log (last 40 lines) - pitch $PITCH - exit code $NODE_RC" "$OUT/node_tail.log"
 cat "$OUT/node.log"
 exit $fail
