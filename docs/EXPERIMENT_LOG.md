@@ -166,6 +166,34 @@ Small-object AP is the metric that matters; overall mAP hides the problem.
 - One run failed inside the ROS installer (download error) and passed on re-run: infrastructure, not code.
 - **Result:** clean exit (code 0); `/detections`, `/tracks_geo` and `/alerts` all received.
 
+### 2026-10-10 — sea data: getting it, and a leakage finding
+- **Access:** the SeaDronesSee site and its Nextcloud shares were not reachable from the build machine, so the subset was
+  pulled through a browser on a second computer: per-image WebDAV requests (ODv2), and HTTP range requests straight
+  into the 27.6 GB MOT zip (its central directory gives every frame's byte offset), resized to 1920 px in the browser,
+  packed into ~300 MB tar files. 4,500 + 714 images, zero failures. Licence: CC0 1.0 (dataset), per the project README.
+- **Finding:** all 34 videos in the official ODv2 *val* split also appear in *train* — frames are split, videos are
+  not. Built a video-disjoint split instead (`data/sds_select_subset.py`, committed as `data/seadronessee_selection.json`):
+  train 2,500 images from 24 videos, val 400 from 8, test 1,200 from 7, plus "seen" = 400 official-val frames from the
+  training videos, to measure the leakage effect.
+- **Data check:** at 640 px input the median sea object is **7 px** across and 59% are under 8 px (VisDrone: 11 px, 31%).
+
+### 2026-10-10 — tilt-aware geolocation, and testing it on real footage
+- `src/esa/geo.py` now intersects the camera ray with the ground using gimbal pitch and heading (pitch 90 reproduces
+  the old nadir formula exactly; unit-tested, and cross-checked against the independent ray code in
+  `benchmarks/geo_sensitivity.py`). Boxes above the horizon get no position.
+- **Real-footage test** (`benchmarks/geo_real.py`): 4 SeaDronesSee-MOT clips with the drone's own log (GPS, altitude,
+  gimbal pitch/heading). No ground-truth object positions exist, so the check is physical: a swimmer moves ≲ 1 m/s, and
+  wrong geometry makes swimmers appear to move with the drone. Ground-truth boxes, not detections. HFOV 65.5° assumed.
+- **Result:** very oblique clip (DJI_0055, pitch 16°, drone 2.8 m/s): swimmer apparent speed **3.17 → 1.04 m/s**,
+  position spread **3.9 → 0.9 m**. Steady clips: small gains or a draw. **One clip is worse** (DJI_0059: 2.13 → 3.63 m/s):
+  the drone accelerates sideways to 7.6 m/s while turning 15°.
+- **Diagnosis attempts:** interpolating the step-wise log (values change every 3–5 frames) changed nothing; a video-log
+  clock-offset sweep (±1.5 s, leave-one-out) found no consistent offset. In DJI_0059 the scene rotates −30° in the image
+  while the log reports a +15° heading change (expected image rotation at 31° pitch ≈ 8°), so the logged attitude does
+  not describe the camera during that manoeuvre. Objects 50 m ahead turn small attitude errors into large position errors.
+- **Conclusion:** the model is right and fixes the dominant error; its accuracy is now limited by attitude telemetry.
+  Next: gimbal attitude at frame rate with timestamps (MAVLink), or estimate yaw from the image.
+
 ---
 
 ## Template

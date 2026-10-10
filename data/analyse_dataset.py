@@ -5,6 +5,7 @@ and shows how small objects get after the image is resized to the model's input 
 """
 
 import argparse
+import json
 from collections import Counter
 from pathlib import Path
 
@@ -78,6 +79,20 @@ def main():
     out = REPO / "docs" / "figures" / f"{name}_{args.split}_stats.png"
     fig.savefig(out, dpi=120)
     print(f"\nfigure -> {out}")
+    summary = {"n_images": len(imgs), "n_boxes": int(len(sizes)), "classes": dict(cls_count.most_common())}
+    for s in args.imgsz:
+        eff = sizes * s / longest
+        summary.update(
+            {
+                f"median{s}": float(np.median(eff)),
+                f"lt8_{s}": float(np.mean(eff < 8)),
+                f"lt16_{s}": float(np.mean(eff < 16)),
+                f"lt32_{s}": float(np.mean(eff < 32)),
+            }
+        )
+    js = REPO / "benchmarks" / "results" / f"{name}_{args.split}_stats.json"
+    js.write_text(json.dumps(summary, indent=1))
+    print(f"summary -> {js}")
 
 
 if __name__ == "__main__":

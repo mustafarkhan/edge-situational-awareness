@@ -35,6 +35,7 @@ def main():
     ap.add_argument("--alt", type=float, default=60.0, help="metres above sea/ground")
     ap.add_argument("--hfov", type=float, default=70.0)
     ap.add_argument("--heading", type=float, default=0.0)
+    ap.add_argument("--pitch", type=float, default=90.0, help="camera tilt below the horizon, 90 = straight down")
     ap.add_argument(
         "--telemetry",
         default=None,
@@ -53,7 +54,7 @@ def main():
 
     source = int(args.source) if args.source.isdigit() else args.source
     model = YOLO(args.model, task="detect")
-    cam = CameraGeo(args.lat, args.lon, args.alt, args.hfov, args.heading)
+    cam = CameraGeo(args.lat, args.lon, args.alt, args.hfov, args.heading, args.pitch)
     alerts = AlertManager(set(args.alert), args.alert_min_frames)
     telem = (
         [json.loads(l) for l in Path(args.telemetry).read_text().splitlines() if l.strip()] if args.telemetry else None
@@ -76,13 +77,20 @@ def main():
             h, w = r.orig_shape
             if telem:
                 t = telem[min(i, len(telem) - 1)]
-                cam = CameraGeo(t["lat"], t["lon"], t["alt_m"], t.get("hfov_deg", args.hfov), t.get("heading_deg", 0.0))
+                cam = CameraGeo(
+                    t["lat"],
+                    t["lon"],
+                    t["alt_m"],
+                    t.get("hfov_deg", args.hfov),
+                    t.get("heading_deg", 0.0),
+                    t.get("pitch_deg", 90.0),
+                )
             ids = r.boxes.id.int().tolist() if r.boxes.id is not None else [None] * len(r.boxes)
             dets = []
             for (x1, y1, x2, y2), c, s, tid in zip(
                 r.boxes.xyxy.tolist(), r.boxes.cls.int().tolist(), r.boxes.conf.tolist(), ids
             ):
-                lat, lon = pixel_to_latlon((x1 + x2) / 2, (y1 + y2) / 2, w, h, cam)
+                pos = pixel_to_latlon((x1 + x2) / 2, (y1 + y2) / 2, w, h, cam)  # None above the horizon
                 dets.append(
                     {
                         "track_id": tid,
@@ -90,8 +98,8 @@ def main():
                         "label": r.names[c],
                         "conf": round(s, 3),
                         "bbox": [round(v, 1) for v in (x1, y1, x2, y2)],
-                        "lat": round(lat, 7),
-                        "lon": round(lon, 7),
+                        "lat": round(pos[0], 7) if pos else None,
+                        "lon": round(pos[1], 7) if pos else None,
                     }
                 )
             new_alerts = alerts.update(dets)

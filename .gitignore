@@ -1,5 +1,5 @@
 # data and outputs never go in git
-datasets/
+/datasets/
 runs/
 *.pt
 *.onnx
@@ -20,6 +20,7 @@ ros2_ws/log/
 *.jsonl
 !docs/figures/.gitkeep
 weights/
-datasets/
+/datasets/
 !docs/video/demo_video.mp4
 configs/datasets/*.yaml
+/weights

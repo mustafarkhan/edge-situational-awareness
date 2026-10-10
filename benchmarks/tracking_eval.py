@@ -79,7 +79,8 @@ def main():
         dist = iou_distance([b for _, b in g], hb)
         acc.update([o for o, _ in g], [d["track_id"] for d in hyps], dist, frameid=f)
         for d in hyps:
-            pos[(f, d["track_id"])] = (d["lat"], d["lon"])
+            if d.get("lat") is not None:  # None = box above the horizon (tilted camera)
+                pos[(f, d["track_id"])] = (d["lat"], d["lon"])
 
     mh = mm.metrics.create()
     s = mh.compute(

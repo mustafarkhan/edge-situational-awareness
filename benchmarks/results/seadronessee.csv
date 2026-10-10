@@ -1,0 +1,2 @@
+tag,split,view,n_images,n_objects,model,imgsz,sahi,cpu_ms_per_image_median,AP50,AP,AP_small,AP_medium,AP_large,AP_swimmer,AP_boat,AP_jetski,AP_life_saving_appliances,AP_buoy
+ft_y11n_640_ep1,test,native,1200,6825,sds_y11n_ep1.pt,640,False,93.2,0.2881,0.1358,0.0658,0.2278,0.3373,0.06,0.3613,0.0024,0.0,0.2555
