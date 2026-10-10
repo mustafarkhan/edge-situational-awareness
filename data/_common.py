@@ -48,5 +48,6 @@ def write_dataset_yaml(name: str, out_root: Path, names: list[str]) -> Path:
         "names": {i: n for i, n in enumerate(names)},
     }
     p = REPO / "configs" / "datasets" / f"{name}.yaml"
+    p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(yaml.safe_dump(cfg, sort_keys=False))
     return p

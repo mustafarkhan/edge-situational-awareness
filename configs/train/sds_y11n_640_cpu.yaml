@@ -1,0 +1,19 @@
+# Sea module: fine-tune COCO-pretrained YOLO11n on the video-disjoint SeaDronesSee subset (CPU).
+# Same recipe as the land model (train at 640, run at 1280), with two lessons from that run applied:
+#   * warmup_epochs 1 (default 3 spanned the whole short land run)
+#   * close_mosaic 1 so mosaic augmentation is actually used for the first epochs (default 10 > epochs
+#     switched it off for the entire land run)
+model: weights/yolo11n.pt
+data: configs/datasets/seadronessee.yaml
+imgsz: 640
+epochs: 4
+warmup_epochs: 1
+close_mosaic: 1
+batch: 8
+workers: 2
+device: cpu
+val: false
+plots: false
+project: runs/sds
+name: y11n_640_cpu
+exist_ok: true

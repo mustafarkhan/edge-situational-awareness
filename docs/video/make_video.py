@@ -474,10 +474,10 @@ def fig_failure(fr):
 
 def map_clip_bg(path_png):
     im, d = canvas()
-    d.text((60, 40), "The real web app, replaying that flight", font=F_H2, fill=FG)
+    d.text((60, 40), "The real web app, replaying a real flight", font=F_H2, fill=FG)
     d.text(
         (60, 100),
-        "React + MapLibre over a FastAPI WebSocket · objects stay put while the drone (yellow) moves",
+        "React + MapLibre over FastAPI WebSocket · drone path (yellow) from its own GPS · objects placed with the tilt-aware model",
         font=F_TINY,
         fill=MUTED,
     )
@@ -503,6 +503,11 @@ def main():
     ap.add_argument("--flight-run", required=True, help="tracking JSONL shown in the video")
     ap.add_argument("--flight-tag", required=True, help="its row tag in tracking.csv")
     ap.add_argument("--map-clip", default=None)
+    ap.add_argument("--sea-data", default=str(REPO / "configs/datasets/seadronessee.yaml"))
+    ap.add_argument("--sea-hero", default=None, help="SeaDronesSee test image for the intro scene")
+    ap.add_argument("--sea-clip", default=None, help="prepared SeaDronesSee-MOT clip folder")
+    ap.add_argument("--sea-run", default=None, help="tracking JSONL for that clip")
+    ap.add_argument("--sea-tag", default=None, help="its row tag in tracking_sea.csv")
     args = ap.parse_args()
     import yaml
 
@@ -592,11 +597,6 @@ def main():
         ),
         8,
     )
-    flush()
-    if args.map_clip and Path(args.map_clip).exists():
-        bg = work / "map_bg.png"
-        map_clip_bg(bg)
-        parts.append(("clip", Path(args.map_clip), bg))
     geo = pd.read_csv(R / "geo_sensitivity.csv")
     add(
         chart_scene(
@@ -624,6 +624,26 @@ def main():
         ),
         8,
     )
+    if args.sea_clip:
+        from sea_scenes import add_sea_scenes
+
+        sea_cfg = yaml.safe_load(Path(args.sea_data).read_text())
+        sea_names = [sea_cfg["names"][i] for i in sorted(sea_cfg["names"])]
+        add_sea_scenes(
+            add,
+            flush,
+            R,
+            Path(args.sea_hero),
+            sea_names,
+            Path(args.sea_clip),
+            Path(args.sea_run),
+            args.sea_tag,
+        )
+    flush()
+    if args.map_clip and Path(args.map_clip).exists():
+        bg = work / "map_bg.png"
+        map_clip_bg(bg)
+        parts.append(("clip", Path(args.map_clip), bg))
     add(
         scene_text(
             "What this shows, honestly",

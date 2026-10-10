@@ -101,3 +101,47 @@ def test_tilt_shifts_image_centre_by_alt_tan_angle():
     cam = CameraGeo(60.0, 25.0, 60, 70)
     lat, _ = tilted_ground_point(480, 270, 960, 540, cam, 10.0)
     assert (lat - 60.0) * 111_320 == pytest.approx(60 * np.tan(np.radians(10)), rel=1e-6)
+
+
+def test_pitch_90_is_the_nadir_model():
+    """The general ray model must reproduce the original straight-down formula exactly at pitch 90."""
+    import math
+
+    cam = CameraGeo(60.0, 25.0, 80, 70, heading_deg=33.0)
+    m_per_px = cam.ground_width_m() / 1000
+    for px, py in [(0, 0), (500, 400), (999, 799), (120, 650)]:
+        dx, dy = (px - 500) * m_per_px, (400 - py) * m_per_px
+        h = math.radians(33.0)
+        east, north = dx * math.cos(h) + dy * math.sin(h), -dx * math.sin(h) + dy * math.cos(h)
+        lat, lon = pixel_to_latlon(px, py, 1000, 800, cam)
+        assert (lat - 60.0) * 111_320 == pytest.approx(north, abs=1e-6)
+        assert (lon - 25.0) * 111_320 * math.cos(math.radians(60.0)) == pytest.approx(east, abs=1e-6)
+
+
+def test_tilted_camera_centre_lands_alt_over_tan_pitch_ahead():
+    import math
+
+    cam = CameraGeo(60.0, 25.0, 50, 70, heading_deg=90.0, pitch_deg=30.0)  # facing east, 30 deg below horizon
+    lat, lon = pixel_to_latlon(480, 270, 960, 540, cam)
+    east = (lon - 25.0) * 111_320 * math.cos(math.radians(60.0))
+    assert east == pytest.approx(50 / math.tan(math.radians(30)), rel=1e-6)
+    assert lat == pytest.approx(60.0, abs=1e-9)
+
+
+def test_pixel_above_horizon_has_no_position():
+    cam = CameraGeo(60.0, 25.0, 50, 70, pitch_deg=10.0)  # 10 deg below horizon; top of image looks above it
+    assert pixel_to_latlon(480, 0, 960, 540, cam) is None
+
+
+def test_independent_tilt_implementation_agrees():
+    """benchmarks/geo_sensitivity.py has its own ray code; both must agree (tilt t from nadir = pitch 90 - t)."""
+    sys.path.insert(0, str(ROOT / "benchmarks"))
+    from geo_sensitivity import tilted_ground_point
+
+    for tilt in (5, 20, 45):
+        cam = CameraGeo(60.0, 25.0, 60, 70)
+        tilted = CameraGeo(60.0, 25.0, 60, 70, pitch_deg=90 - tilt)
+        for px, py in [(100, 100), (480, 270), (900, 500)]:
+            assert pixel_to_latlon(px, py, 960, 540, tilted) == pytest.approx(
+                tilted_ground_point(px, py, 960, 540, cam, tilt), abs=1e-9
+            )

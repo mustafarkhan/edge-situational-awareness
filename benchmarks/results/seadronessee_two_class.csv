@@ -1,0 +1,5 @@
+tag,split,view,n_images,n_objects,model,imgsz,sahi,cpu_ms_per_image_median,AP50,AP,AP_small,AP_medium,AP_large,AP_swimmer,AP_boat
+coco_y11n_640,test,two_class,1200,5582,yolo11n.pt,640,False,96.1,0.1885,0.0913,0.0181,0.1766,0.5399,0.0272,0.1554
+coco_y11n_1280,test,two_class,1200,5582,yolo11n.pt,1280,False,303.4,0.3852,0.2032,0.0889,0.3648,0.6613,0.0936,0.3128
+coco_y11n_1280_seen,seen,two_class,400,2334,yolo11n.pt,1280,False,310.6,0.4733,0.2818,0.098,0.3775,0.4099,0.1119,0.4516
+coco_y11n_1280_val,val,two_class,400,2215,yolo11n.pt,1280,False,351.2,0.4982,0.2315,0.1502,0.2935,0.4355,0.1025,0.3606

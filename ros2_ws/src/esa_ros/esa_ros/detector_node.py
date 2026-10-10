@@ -38,6 +38,7 @@ class DetectorNode(Node):
         p("alt_m", 60.0)
         p("hfov_deg", 70.0)
         p("heading_deg", 0.0)
+        p("pitch_deg", 90.0)  # camera tilt below the horizon; 90 = straight down
         p("alert_labels", ["swimmer"])
         p("alert_min_frames", 5)
         g = lambda n: self.get_parameter(n).value  # noqa: E731
@@ -45,7 +46,7 @@ class DetectorNode(Node):
         self.model = YOLO(g("model"), task="detect")
         self.source = int(g("source")) if str(g("source")).isdigit() else g("source")
         self.imgsz, self.conf, self.tracker = g("imgsz"), g("conf"), g("tracker")
-        self.cam = CameraGeo(g("lat"), g("lon"), g("alt_m"), g("hfov_deg"), g("heading_deg"))
+        self.cam = CameraGeo(g("lat"), g("lon"), g("alt_m"), g("hfov_deg"), g("heading_deg"), g("pitch_deg"))
         self.alerts = AlertManager(set(g("alert_labels")), g("alert_min_frames"))
         self.pub_det = self.create_publisher(Detection2DArray, "detections", 10)
         self.pub_geo = self.create_publisher(String, "tracks_geo", 10)
@@ -98,14 +99,15 @@ class DetectorNode(Node):
                 hyp.hypothesis.score = float(s)
                 d.results.append(hyp)
                 arr.detections.append(d)
-                lat, lon = pixel_to_latlon((x1 + x2) / 2, (y1 + y2) / 2, w, h, self.cam)
+                pos = pixel_to_latlon((x1 + x2) / 2, (y1 + y2) / 2, w, h, self.cam)  # None above the horizon
+                lat, lon = pos if pos else (None, None)
                 dets.append(
                     {
                         "track_id": tid,
                         "label": r.names[c],
                         "conf": round(s, 3),
-                        "lat": round(lat, 7),
-                        "lon": round(lon, 7),
+                        "lat": round(lat, 7) if lat is not None else None,
+                        "lon": round(lon, 7) if lon is not None else None,
                     }
                 )
 
