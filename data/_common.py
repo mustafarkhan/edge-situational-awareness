@@ -1,4 +1,5 @@
 """Helpers shared by the dataset converters."""
+
 from __future__ import annotations
 
 import os
@@ -39,8 +40,13 @@ def yolo_row(cls: int, x: float, y: float, w: float, h: float, iw: int, ih: int)
 def write_dataset_yaml(name: str, out_root: Path, names: list[str]) -> Path:
     """Ultralytics resolves relative dataset paths against its own settings dir, which
     confuses everyone once. Writing an absolute path avoids that."""
-    cfg = {"path": str(out_root.resolve()), "train": "images/train", "val": "images/val",
-           "test": "images/test", "names": {i: n for i, n in enumerate(names)}}
+    cfg = {
+        "path": str(out_root.resolve()),
+        "train": "images/train",
+        "val": "images/val",
+        "test": "images/test",
+        "names": {i: n for i, n in enumerate(names)},
+    }
     p = REPO / "configs" / "datasets" / f"{name}.yaml"
     p.write_text(yaml.safe_dump(cfg, sort_keys=False))
     return p

@@ -8,6 +8,7 @@ This is deliberately simple and its assumptions are part of the Limitations sect
 Error grows quickly with tilt and altitude error. For real use you would take the
 drone's telemetry (MAVLink) and the gimbal attitude and do a proper ray-ground intersection.
 """
+
 from __future__ import annotations
 
 import math
@@ -18,10 +19,10 @@ EARTH_M_PER_DEG_LAT = 111_320.0
 
 @dataclass
 class CameraGeo:
-    lat: float          # drone latitude (deg)
-    lon: float          # drone longitude (deg)
-    alt_m: float        # height above ground/sea (m)
-    hfov_deg: float     # horizontal field of view of the camera (deg)
+    lat: float  # drone latitude (deg)
+    lon: float  # drone longitude (deg)
+    alt_m: float  # height above ground/sea (m)
+    hfov_deg: float  # horizontal field of view of the camera (deg)
     heading_deg: float = 0.0  # 0 = image top points north, clockwise positive
 
     def ground_width_m(self) -> float:

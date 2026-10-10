@@ -11,3 +11,18 @@ requires-python = ">=3.10"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+extend-exclude = ["web/frontend", "ros2_ws/build", "ros2_ws/install"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B"]
+ignore = ["E501", "E702", "E731", "E741", "B905"]  # E501: `ruff format` sets code width; long message strings stay intact.  # compact one-liners and short loop names kept deliberately; zip() inputs are same-length by construction
+
+[tool.ruff.lint.isort]
+known-first-party = ["esa"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

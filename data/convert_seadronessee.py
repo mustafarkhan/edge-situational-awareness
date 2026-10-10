@@ -12,6 +12,7 @@ Usage:
       --val-json   /path/annotations/instances_val.json   --val-images   /path/images/val \
       --out datasets/seadronessee_yolo
 """
+
 import argparse
 import json
 import random
@@ -55,14 +56,19 @@ def main():
 
     # block split of the official train set
     imgs = sorted(tr["images"], key=lambda im: im["id"])
-    blocks = [imgs[i:i + args.block_size] for i in range(0, len(imgs), args.block_size)]
+    blocks = [imgs[i : i + args.block_size] for i in range(0, len(imgs), args.block_size)]
     random.Random(args.seed).shuffle(blocks)
     n_val = max(1, round(len(blocks) * args.val_fraction))
-    split_imgs = {"val": [im for b in blocks[:n_val] for im in b],
-                  "train": [im for b in blocks[n_val:] for im in b],
-                  "test": va["images"]}
-    sources = {"train": (Path(args.train_images), tr_anns), "val": (Path(args.train_images), tr_anns),
-               "test": (Path(args.val_images), va_anns)}
+    split_imgs = {
+        "val": [im for b in blocks[:n_val] for im in b],
+        "train": [im for b in blocks[n_val:] for im in b],
+        "test": va["images"],
+    }
+    sources = {
+        "train": (Path(args.train_images), tr_anns),
+        "val": (Path(args.train_images), tr_anns),
+        "test": (Path(args.val_images), va_anns),
+    }
 
     for split, images in split_imgs.items():
         img_dir, anns = sources[split]
@@ -82,8 +88,10 @@ def main():
                     rows.append(r)
                     counts[names[cat_to_cls[a["category_id"]]]] += 1
             write_label(out / "labels" / split / (src.stem + ".txt"), rows)
-        print(f"{split:5s}: {len(images) - dropped} images, {sum(counts.values())} boxes, {dict(counts)}"
-              + (f"  (missing image files: {dropped})" if dropped else ""))
+        print(
+            f"{split:5s}: {len(images) - dropped} images, {sum(counts.values())} boxes, {dict(counts)}"
+            + (f"  (missing image files: {dropped})" if dropped else "")
+        )
 
     print("dataset yaml:", write_dataset_yaml("seadronessee", out, names))
 

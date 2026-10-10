@@ -8,6 +8,7 @@
 Reports: mAP (Ultralytics val), latency mean/p50/p95/p99/max, FPS, average power,
 energy per frame, max temperature. Appends a row to benchmarks/results/jetson.csv.
 """
+
 import argparse
 import csv
 import platform
@@ -72,11 +73,18 @@ def main():
 
     lat = np.array(lat)
     row = {
-        "tag": args.tag, "model": Path(args.model).name, "imgsz": args.imgsz,
-        "device": platform.node(), "power_mode": power_mode(), "n_images": len(lat),
-        "lat_mean_ms": round(lat.mean(), 2), "lat_p50_ms": round(np.percentile(lat, 50), 2),
-        "lat_p95_ms": round(np.percentile(lat, 95), 2), "lat_p99_ms": round(np.percentile(lat, 99), 2),
-        "lat_max_ms": round(lat.max(), 2), "fps": round(1000 / lat.mean(), 1),
+        "tag": args.tag,
+        "model": Path(args.model).name,
+        "imgsz": args.imgsz,
+        "device": platform.node(),
+        "power_mode": power_mode(),
+        "n_images": len(lat),
+        "lat_mean_ms": round(lat.mean(), 2),
+        "lat_p50_ms": round(np.percentile(lat, 50), 2),
+        "lat_p95_ms": round(np.percentile(lat, 95), 2),
+        "lat_p99_ms": round(np.percentile(lat, 99), 2),
+        "lat_max_ms": round(lat.max(), 2),
+        "fps": round(1000 / lat.mean(), 1),
         "pre_ms": round(np.mean([s["preprocess"] for s in stages]), 2),
         "infer_ms": round(np.mean([s["inference"] for s in stages]), 2),
         "post_ms": round(np.mean([s["postprocess"] for s in stages]), 2),

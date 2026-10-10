@@ -3,18 +3,19 @@ and shows how small objects get after the image is resized to the model's input 
 
   python data/analyse_dataset.py --data configs/datasets/seadronessee.yaml --split train --imgsz 640
 """
+
 import argparse
 from collections import Counter
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import yaml
-from PIL import Image
-
 from _common import REPO
+from PIL import Image
 
 IMG_EXT = {".jpg", ".jpeg", ".png", ".bmp"}
 
@@ -51,20 +52,27 @@ def main():
     print("| class | boxes | share |\n|---|---|---|")
     for k, v in cls_count.most_common():
         print(f"| {k} | {v} | {v / len(sizes):.1%} |")
-    print(f"\nObjects per image: mean {np.mean(per_img):.1f}, max {np.max(per_img)}, "
-          f"images with none: {sum(n == 0 for n in per_img)}")
+    print(
+        f"\nObjects per image: mean {np.mean(per_img):.1f}, max {np.max(per_img)}, "
+        f"images with none: {sum(n == 0 for n in per_img)}"
+    )
     print(f"\nsqrt(area) in original pixels: median {np.median(sizes):.1f}, p10 {np.percentile(sizes, 10):.1f}")
     print("\n| model input | median object size | < 8 px | < 16 px | < 32 px (COCO 'small') |\n|---|---|---|---|---|")
     for s in args.imgsz:
         eff = sizes * s / longest  # letterbox scales the longest side to s
-        print(f"| {s} | {np.median(eff):.1f} px | {np.mean(eff < 8):.1%} | {np.mean(eff < 16):.1%} | {np.mean(eff < 32):.1%} |")
+        print(
+            f"| {s} | {np.median(eff):.1f} px | {np.mean(eff < 8):.1%} | {np.mean(eff < 16):.1%} | {np.mean(eff < 32):.1%} |"
+        )
 
     fig, ax = plt.subplots(1, 2, figsize=(12, 4))
     ax[0].bar(*zip(*cls_count.most_common()))
-    ax[0].set_title("Class balance"); ax[0].tick_params(axis="x", rotation=45)
+    ax[0].set_title("Class balance")
+    ax[0].tick_params(axis="x", rotation=45)
     for s in args.imgsz:
         ax[1].hist(sizes * s / longest, bins=np.logspace(0, 3, 50), alpha=0.5, label=f"input {s}")
-    ax[1].set_xscale("log"); ax[1].axvline(32, ls="--", c="k"); ax[1].legend()
+    ax[1].set_xscale("log")
+    ax[1].axvline(32, ls="--", c="k")
+    ax[1].legend()
     ax[1].set_title("Object size after resize (sqrt area, px)")
     fig.tight_layout()
     out = REPO / "docs" / "figures" / f"{name}_{args.split}_stats.png"

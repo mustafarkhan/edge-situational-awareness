@@ -3,6 +3,7 @@
 
   python data/yolo_to_coco.py --data configs/datasets/seadronessee.yaml --split test
 """
+
 import argparse
 import json
 from pathlib import Path
@@ -26,9 +27,12 @@ def main():
     names = [names[i] for i in sorted(names)] if isinstance(names, dict) else names
     img_dir = root / cfg[args.split]
 
-    coco = {"info": {"root": str(root), "split": args.split},
-            "images": [], "annotations": [],
-            "categories": [{"id": i + 1, "name": n} for i, n in enumerate(names)]}
+    coco = {
+        "info": {"root": str(root), "split": args.split},
+        "images": [],
+        "annotations": [],
+        "categories": [{"id": i + 1, "name": n} for i, n in enumerate(names)],
+    }
     aid = 1
     for iid, p in enumerate(sorted(x for x in img_dir.iterdir() if x.suffix.lower() in IMG_EXT), start=1):
         w, h = Image.open(p).size
@@ -38,8 +42,16 @@ def main():
             c, cx, cy, bw, bh = line.split()
             bw, bh = float(bw) * w, float(bh) * h
             x, y = float(cx) * w - bw / 2, float(cy) * h - bh / 2
-            coco["annotations"].append({"id": aid, "image_id": iid, "category_id": int(c) + 1,
-                                        "bbox": [x, y, bw, bh], "area": bw * bh, "iscrowd": 0})
+            coco["annotations"].append(
+                {
+                    "id": aid,
+                    "image_id": iid,
+                    "category_id": int(c) + 1,
+                    "bbox": [x, y, bw, bh],
+                    "area": bw * bh,
+                    "iscrowd": 0,
+                }
+            )
             aid += 1
 
     out = Path(args.out or f"{root}/coco_{args.split}.json")

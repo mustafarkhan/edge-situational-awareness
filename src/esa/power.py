@@ -4,6 +4,7 @@ Runs tegrastats in the background and stores timestamped samples, so a benchmark
 ask for the average power over exactly the window in which it was timing inference.
 On a non-Jetson machine `available` is False and summaries return None.
 """
+
 from __future__ import annotations
 
 import re
@@ -28,8 +29,9 @@ class TegraStats:
     def start(self):
         if not self.available:
             return self
-        self._proc = subprocess.Popen(["tegrastats", "--interval", str(self.interval_ms)],
-                                      stdout=subprocess.PIPE, text=True)
+        self._proc = subprocess.Popen(
+            ["tegrastats", "--interval", str(self.interval_ms)], stdout=subprocess.PIPE, text=True
+        )
         self._thread = threading.Thread(target=self._read, daemon=True)
         self._thread.start()
         return self

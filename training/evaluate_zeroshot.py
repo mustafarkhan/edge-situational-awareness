@@ -11,6 +11,7 @@ truth (a detection on one counts as a false positive, so scores are slightly pes
   python training/evaluate_zeroshot.py --model yolo11n.pt --data configs/datasets/visdrone.yaml \
       --imgsz 640 --tag y11n_640_zeroshot [--sahi --slice 640]
 """
+
 import argparse
 import csv
 import json
@@ -26,8 +27,7 @@ sys.path.insert(0, str(REPO / "src"))
 from esa.coco_utils import coco_evaluate, predict_sahi, predict_ultralytics  # noqa: E402
 
 SUPER = ["person", "two_wheeler", "vehicle"]
-VISDRONE_TO_SUPER = {"pedestrian": 0, "people": 0, "bicycle": 1, "motor": 1,
-                     "car": 2, "van": 2, "truck": 2, "bus": 2}
+VISDRONE_TO_SUPER = {"pedestrian": 0, "people": 0, "bicycle": 1, "motor": 1, "car": 2, "van": 2, "truck": 2, "bus": 2}
 COCO_TO_SUPER = {0: 0, 1: 1, 3: 1, 2: 2, 5: 2, 7: 2}  # COCO ids: person, bicycle, motorcycle, car, bus, truck
 
 
@@ -37,8 +37,12 @@ def build_gt(data_yaml: str, split: str) -> Path:
     out = root / f"coco_{split}_super.json"
     if out.exists():
         return out
-    coco = {"info": {"root": str(root), "split": split}, "images": [], "annotations": [],
-            "categories": [{"id": i + 1, "name": n} for i, n in enumerate(SUPER)]}
+    coco = {
+        "info": {"root": str(root), "split": split},
+        "images": [],
+        "annotations": [],
+        "categories": [{"id": i + 1, "name": n} for i, n in enumerate(SUPER)],
+    }
     aid = 1
     imgs = sorted(p for p in (root / cfg[split]).iterdir() if p.suffix.lower() in {".jpg", ".png"})
     for iid, p in enumerate(imgs, start=1):
@@ -51,9 +55,16 @@ def build_gt(data_yaml: str, split: str) -> Path:
             if sc is None:
                 continue
             bw, bh = float(bw) * w, float(bh) * h
-            coco["annotations"].append({"id": aid, "image_id": iid, "category_id": sc + 1,
-                                        "bbox": [float(cx) * w - bw / 2, float(cy) * h - bh / 2, bw, bh],
-                                        "area": bw * bh, "iscrowd": 0})
+            coco["annotations"].append(
+                {
+                    "id": aid,
+                    "image_id": iid,
+                    "category_id": sc + 1,
+                    "bbox": [float(cx) * w - bw / 2, float(cy) * h - bh / 2, bw, bh],
+                    "area": bw * bh,
+                    "iscrowd": 0,
+                }
+            )
             aid += 1
     out.write_text(json.dumps(coco))
     return out
@@ -83,8 +94,12 @@ def main():
     ap.add_argument("--slice", type=int, default=640)
     ap.add_argument("--overlap", type=float, default=0.2)
     ap.add_argument("--max-dets", type=int, default=500)
-    ap.add_argument("--class-map", choices=["coco", "visdrone"], default="coco",
-                    help="'coco' for pretrained weights, 'visdrone' for weights fine-tuned on VisDrone")
+    ap.add_argument(
+        "--class-map",
+        choices=["coco", "visdrone"],
+        default="coco",
+        help="'coco' for pretrained weights, 'visdrone' for weights fine-tuned on VisDrone",
+    )
     ap.add_argument("--limit", type=int, default=0, help="evaluate only the first N images (0 = all)")
     ap.add_argument("--device", default="cpu", help="'cpu', or 0 for the first CUDA GPU (e.g. on the Jetson)")
     ap.add_argument("--tag", required=True)
@@ -102,25 +117,59 @@ def main():
     root = gt["info"]["root"]
 
     if args.sahi:
-        preds, times = predict_sahi(args.model, gt, root, slice_size=args.slice, overlap=args.overlap,
-                                    device="cpu" if args.device == "cpu" else f"cuda:{args.device}", conf=args.conf, imgsz=args.imgsz)
+        preds, times = predict_sahi(
+            args.model,
+            gt,
+            root,
+            slice_size=args.slice,
+            overlap=args.overlap,
+            device="cpu" if args.device == "cpu" else f"cuda:{args.device}",
+            conf=args.conf,
+            imgsz=args.imgsz,
+        )
     else:
-        preds, times = predict_ultralytics(args.model, gt, root, imgsz=args.imgsz,
-                                           device="cpu" if args.device == "cpu" else int(args.device),
-                                           max_det=args.max_dets, conf=args.conf)
+        preds, times = predict_ultralytics(
+            args.model,
+            gt,
+            root,
+            imgsz=args.imgsz,
+            device="cpu" if args.device == "cpu" else int(args.device),
+            max_det=args.max_dets,
+            conf=args.conf,
+        )
     mapped = remap(preds, args.class_map)
     if mapped:
         m = coco_evaluate(gt_path, mapped, max_dets=args.max_dets)
     else:
         # a model that outputs nothing scores zero; record it rather than crash (see INT8 experiment)
         print("WARNING: model produced no detections at all -> all AP = 0")
-        m = {k: 0.0 for k in ["AP", "AP50", "AP75", "AP_small", "AP_medium", "AP_large",
-                              "AP_person", "AP_two_wheeler", "AP_vehicle"]}
+        m = {
+            k: 0.0
+            for k in [
+                "AP",
+                "AP50",
+                "AP75",
+                "AP_small",
+                "AP_medium",
+                "AP_large",
+                "AP_person",
+                "AP_two_wheeler",
+                "AP_vehicle",
+            ]
+        }
 
-    row = {"tag": args.tag, "split": args.split, "n_images": len(gt["images"]), "model": Path(args.model).name,
-           "imgsz": args.imgsz, "sahi": args.sahi, "slice": args.slice if args.sahi else "",
-           "conf": args.conf, "cpu_ms_per_image_median": round(float(np.median(times)), 1),
-           **{k: round(v, 4) for k, v in m.items()}}
+    row = {
+        "tag": args.tag,
+        "split": args.split,
+        "n_images": len(gt["images"]),
+        "model": Path(args.model).name,
+        "imgsz": args.imgsz,
+        "sahi": args.sahi,
+        "slice": args.slice if args.sahi else "",
+        "conf": args.conf,
+        "cpu_ms_per_image_median": round(float(np.median(times)), 1),
+        **{k: round(v, 4) for k, v in m.items()},
+    }
     out = Path(args.out)
     new = not out.exists()
     with out.open("a", newline="") as f:
