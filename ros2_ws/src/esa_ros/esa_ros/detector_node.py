@@ -15,6 +15,7 @@ import time
 import rclpy
 from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import String
 from ultralytics import YOLO
 from vision_msgs.msg import Detection2D, Detection2DArray, ObjectHypothesisWithPose
@@ -48,7 +49,12 @@ class DetectorNode(Node):
         self.alerts = AlertManager(set(g("alert_labels")), g("alert_min_frames"))
         self.pub_det = self.create_publisher(Detection2DArray, "detections", 10)
         self.pub_geo = self.create_publisher(String, "tracks_geo", 10)
-        self.pub_alert = self.create_publisher(String, "alerts", 10)
+        # Alerts are latched (transient-local, last 10 kept): a ground station that connects or
+        # reconnects late still receives recent alerts. Found when the end-to-end test missed alerts
+        # fired before its subscriber had connected.
+        alert_qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE,
+                               durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.pub_alert = self.create_publisher(String, "alerts", alert_qos)
         self.get_logger().info(f"model={g('model')} source={self.source}")
 
     def run(self):
