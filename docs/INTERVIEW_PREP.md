@@ -28,7 +28,10 @@ The rule that overrides everything here: **only say numbers you measured, and kn
    mode restored 8–76 per frame. Lesson: check the data's time structure before choosing an algorithm.
 3. **INT8 with zero detections.** Predicted from the architecture (box coordinates and scores share one tensor),
    confirmed by experiment, fixed by excluding 48 post-processing nodes from quantisation.
-4. **No tracking data available.** Built a controlled test instead, where the ground truth is exact, and was explicit
+4. **Alerts nobody received.** The ROS 2 end-to-end test in CI got detections but no alerts: every alert fired in the
+   first frames, before the subscriber had connected. A ground station reconnecting mid-mission would have the same
+   problem. Made `/alerts` latched (transient-local QoS). A test that fails for a reason that also matters in the field.
+5. **No tracking data available.** Built a controlled test instead, where the ground truth is exact, and was explicit
    about what it can't show.
 
 ## The 5-minute walkthrough

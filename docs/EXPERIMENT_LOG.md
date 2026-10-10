@@ -152,6 +152,20 @@ Small-object AP is the metric that matters; overall mAP hides the problem.
 - Two small bugs fixed: alerts appeared twice because the replay looped (app now resets on frame 0; backend gained
   `--once`); the view centred on the drone's first position, so the flight drifted off-screen (`?center=&zoom=`).
 
+### 2026-10-10 — ROS 2 node, tested end to end in CI
+- ROS could not be installed on the build machine, so a GitHub Actions workflow installs ROS 2 Humble, builds the
+  package, runs the node on Ultralytics' sample images and checks every output topic (`ros2_ws/test_node.sh`).
+  Results are emitted as Actions annotations, because raw CI logs were not downloadable from the build machine.
+- Bugs found, in order:
+  1. `ros2 topic echo` exits immediately if the topic doesn't exist yet and no type is given (test bug: pass types).
+  2. Sample images aren't bundled with this Ultralytics version (test bug: download them explicitly).
+  3. **Node aborted at exit** ("terminate called without an active exception"): the spin thread was still running
+     during teardown. Fix: explicit executor, shut it down and join the thread before destroying the node.
+  4. **Alerts lost by late subscribers:** all five alerts fired in the first frames, before the subscriber connected
+     (it first saw frame 16). Fix: `/alerts` is latched (transient local, depth 10).
+- One run failed inside the ROS installer (download error) and passed on re-run: infrastructure, not code.
+- **Result:** clean exit (code 0); `/detections`, `/tracks_geo` and `/alerts` all received.
+
 ---
 
 ## Template

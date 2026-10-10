@@ -291,6 +291,8 @@ A model is not a product. A detector outputs boxes per frame, with no memory. A 
    python web/backend/server.py --ros # bridge to the map
    ros2 bag record /detections /tracks_geo /alerts
    ```
+   Check the node end to end before adding a camera: `bash ros2_ws/test_node.sh` runs it on sample images
+   and verifies every topic (the same test runs in CI on every ROS change).
 5. Replay the bag (`ros2 bag play <folder>`) with the bridge running and confirm the map shows the same run.
 6. Optional: DeepStream for several cameras at once. Only do this if everything else is done; it's a separate learning curve.
 
