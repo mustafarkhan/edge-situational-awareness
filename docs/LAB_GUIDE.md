@@ -322,7 +322,11 @@ Benchmarks measure performance on data that resembles the training data. Real de
 2. Run `tools/detect_video.py` on each and save the annotated video.
 3. For each condition, note: missed people, false alarms (what triggered them), ID switches, FPS.
 4. Pick 6–10 representative failure frames, save them to `docs/figures/failures/`, and write one or two sentences per frame in `docs/LIMITATIONS.md`: what happened and the likely cause.
-5. If you fly your own test: register as an operator with Traficom, follow the open-category rules (including not flying over uninvolved people), check local airspace restrictions, film only willing friends, and keep the drone over water or open land. Don't fly anything near your employer's work.
+5. **What this repo did** (`scripts/sea_experiments.sh`, README §9): SeaDronesSee-MOT clips come with the drone's own
+   log, so they test tracking *and* geolocation on real footage. Two lessons worth copying: check whether the official
+   split shares videos between train and val (here it did, and inflated swimmer AP by ~50%), and when ground-truth
+   positions don't exist, use a physical check (a swimmer moves ≲ 1 m/s) instead of giving up on measuring.
+6. If you fly your own test: register as an operator with Traficom, follow the open-category rules (including not flying over uninvolved people), check local airspace restrictions, film only willing friends, and keep the drone over water or open land. Don't fly anything near your employer's work.
 
 ### Checkpoint
 

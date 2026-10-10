@@ -1,2 +1,6 @@
 tag,split,view,n_images,n_objects,model,imgsz,sahi,cpu_ms_per_image_median,AP50,AP,AP_small,AP_medium,AP_large,AP_swimmer,AP_boat,AP_jetski,AP_life_saving_appliances,AP_buoy
 ft_y11n_640_ep1,test,native,1200,6825,sds_y11n_ep1.pt,640,False,93.2,0.2881,0.1358,0.0658,0.2278,0.3373,0.06,0.3613,0.0024,0.0,0.2555
+ft_y11n_640,test,native,1200,6825,sds_y11n_ep4.pt,640,False,75.2,0.4379,0.2207,0.1451,0.322,0.3738,0.1261,0.4547,0.1099,0.0,0.413
+ft_y11n_1280,test,native,1200,6825,sds_y11n_ep4.pt,1280,False,259.0,0.4883,0.2663,0.2066,0.361,0.2874,0.1849,0.5026,0.1434,0.0,0.5005
+ft_y11n_1280_seen,seen,native,400,2658,sds_y11n_ep4.pt,1280,False,260.6,0.5996,0.3606,0.3005,0.5939,0.2703,0.2951,0.6315,0.4367,0.0,0.4396
+ft_y11n_1280_val,val,native,400,2484,sds_y11n_ep4.pt,1280,False,263.4,0.4971,0.2224,0.2495,0.3433,0.1766,0.1851,0.4549,0.0344,,0.2152

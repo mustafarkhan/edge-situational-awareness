@@ -17,6 +17,12 @@ The rule that overrides everything here: **only say numbers you measured, and kn
 > error. And INT8 quantisation produced zero detections until I kept the detection head in FP32; then it cost
 > 5% accuracy for a 20% speed-up and a model a third the size.
 >
+> Then I repeated it at sea, for search and rescue, on SeaDronesSee. Swimmers are a median 7 pixels across.
+> Fine-tuning took swimmer AP from 0.03 to 0.19. I also found that the official validation split shares videos
+> with training, which would have overstated swimmer AP by about 50%. On real flights with the drone's own
+> log, tilt-aware geolocation cut the swimmers' apparent drift from 3.2 to 1.0 m/s, and on one clip it got
+> worse because the attitude log itself was wrong.
+>
 > I documented where it fails, mainly tiny objects and false alarms at night. Next is TensorRT on the Jetson.
 
 ## Stories to rehearse (symptom → cause → fix → how you verified)
@@ -32,7 +38,18 @@ The rule that overrides everything here: **only say numbers you measured, and kn
    first frames, before the subscriber had connected. A ground station reconnecting mid-mission would have the same
    problem. Made `/alerts` latched (transient-local QoS). A test that fails for a reason that also matters in the field.
 5. **No tracking data available.** Built a controlled test instead, where the ground truth is exact, and was explicit
-   about what it can't show.
+   about what it can't show. Later, real sea footage confirmed its prediction: at slow camera speeds, motion
+   compensation makes no difference.
+6. **The official split that leaks.** Every video in SeaDronesSee's val split also appears in train. Built a
+   video-disjoint split, then measured the effect with a control: the same model on frames from seen vs unseen videos,
+   minus the gap a COCO model (which saw neither) shows. Swimmer AP would have been overstated by about 50%.
+7. **The pipeline that scored the wrong checkpoint.** A queue waited for training with `pgrep "train.py"`, but the
+   resumed run's command line was different, so evaluation ran on the epoch-1 checkpoint. Noticed because the "final"
+   numbers were identical to the epoch-1 row. Fixed the wait, added a guard that prints the checkpoint's epoch and
+   size before scoring, re-ran. Lesson: suspicious equality is a signal.
+8. **The better model that made things worse.** Tilt-aware geolocation fixed three real clips and broke one. The
+   video rotates −30° while the log implies about +8°: the attitude log was wrong during a fast manoeuvre. Smoothing
+   and clock-offset search didn't help, and I reported it rather than tuning it away.
 
 ## The 5-minute walkthrough
 
@@ -50,7 +67,7 @@ Walk the pipeline left to right, and at each stage say one decision and why.
 - **Robotics / deployment roles:** spend most time on Lab 3 and Lab 4: measuring on hardware, power modes, thermals, ROS 2 integration, rosbag replay, failure analysis.
 - **AI / ML roles:** spend most time on Labs 1–2: data analysis, leakage, evaluation rigour, small-object AP, the experiment log, INT8 accuracy loss.
 - **Frontend / full-stack roles:** the React map, the WebSocket bridge, dropping stale frames rather than queuing them, handling reconnects, and presenting uncertainty to an operator (the geolocation disclaimer on screen).
-- **Drone / UAV roles:** energy per frame, latency budgets, the nadir-camera geolocation assumptions and how telemetry plus gimbal attitude would fix them.
+- **Drone / UAV roles:** energy per frame, latency budgets, tilt-aware geolocation on real flight logs, and why attitude telemetry quality now limits it.
 
 ## Questions to expect, and what a good answer contains
 
@@ -66,7 +83,7 @@ Prepare your own wording. These are the points your answer should hit.
 
 **"Your FPS is X. Is that real time?"** Depends on the requirement: compare with camera frame rate and the speed at which the scene changes. Mention p99 latency, and that pre- and post-processing are part of the budget.
 
-**"What would you do with another month?"** Pick from: proper geolocation with MAVLink telemetry and gimbal angles; thermal camera and a thermal model for night; a larger and harder test set; multi-camera DeepStream pipeline; hard-negative mining for wave-crest false alarms; INT8 quantisation-aware training if calibration loses too much.
+**"What would you do with another month?"** Pick from: frame-rate, timestamped gimbal attitude over MAVLink (real geolocation is now limited by telemetry, not geometry); a longer sea fine-tune so life-saving appliances are learned; thermal camera and a thermal model for night; a larger and harder test set; multi-camera DeepStream pipeline; hard-negative mining for wave-crest false alarms; INT8 quantisation-aware training if calibration loses too much.
 
 **"What was the hardest bug?"** Have a real story from your log, with the symptom, how you found it and how you verified the fix. Write it down as soon as it happens; you won't remember the details later.
 

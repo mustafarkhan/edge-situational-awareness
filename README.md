@@ -4,19 +4,21 @@
 [![ROS 2](https://github.com/mustafarkhan/edge-situational-awareness/actions/workflows/ros2.yml/badge.svg)](https://github.com/mustafarkhan/edge-situational-awareness/actions/workflows/ros2.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
-Detecting, tracking and geolocating people and vehicles in drone video, built for embedded
+Detecting, tracking and geolocating people and vehicles (on land) and swimmers and boats (at sea) in drone
+video, built for embedded
 deployment (NVIDIA Jetson). Every number below was measured on public data, and each one links to
 the script and results file that produced it.
 
 ![Tracking on a simulated flight](docs/figures/tracking_demo.gif)
 
-🎬 **[Demo video (2 min)](docs/video/demo_video.mp4)**, rendered only from real outputs by `docs/video/make_video.py`.
+🎬 **[Demo video (3 min)](docs/video/demo_video.mp4)**, rendered only from real outputs by `docs/video/make_video.py`.
 
-> **Status (October 2026).** Data analysis, detector experiments, fine-tuning, tracking,
-> geolocation, INT8 quantisation, failure analysis and the live map are done, measured on CPU; the ROS 2
-> node is tested end to end on ROS 2 Humble in CI.
+> **Status (October 2026).** Land (VisDrone) and sea (SeaDronesSee) modules are done, measured on CPU:
+> data analysis, detector experiments, fine-tuning, tracking (simulated and **real** footage),
+> tilt-aware geolocation tested on **real flight logs**, INT8 quantisation, failure analysis and the live map.
+> The ROS 2 node is tested end to end on ROS 2 Humble in CI.
 > **Still to come:** TensorRT on a Jetson Orin Nano (speed, watts, joules per frame) with
-> [one command](benchmarks/run_on_jetson.sh), then real continuous footage and maritime data.
+> [one command](benchmarks/run_on_jetson.sh).
 
 ## Results at a glance
 
@@ -30,6 +32,10 @@ the script and results file that produced it.
 | Where do position errors come from? | Ignoring a **10° gimbal tilt costs 11.8 m**, more than a 5 m GPS error |
 | Does INT8 work? | Quantising everything gives **zero detections**; keeping the head in FP32 costs **5%** small-object AP for **20%** less time and a **66%** smaller model |
 | Where does it still fail? | Objects under 8 px (**10%** found), heavy occlusion (**23%**), night (precision **70% → 44%**) |
+| **At sea:** does the land recipe transfer? | Yes. Swimmer AP **0.027 → 0.185** (COCO 640 → fine-tuned 1280); boats 0.155 → 0.503 |
+| Can the official sea validation split be trusted? | No. It shares videos with train and **inflates swimmer AP by ~50%** (0.185 → 0.295), measured against a control |
+| Does tracking hold on real sea footage? | IDF1 **0.50–0.79** on 4 real clips; GMC makes no difference at these slow camera speeds (as the simulation predicts) |
+| Does tilt-aware geolocation help on real flights? | Better on 3 of 4 real clips (best: swimmer drift **3.2 → 1.0 m/s**). Worse on the fourth, whose attitude log disagrees with the video |
 
 ## 1. The data
 
@@ -97,7 +103,7 @@ Source: [`benchmarks/results/tracking.csv`](benchmarks/results/tracking.csv).
 - Without it, recall also halves at speed. Trackers only report *confirmed* tracks; when every object jumps 20+ px
   per frame, tracks keep breaking and the detections behind them are hidden.
 - **What this test cannot show:** objects moving on their own, real camera geometry (the frame is treated as a
-  straight-down photo), blur, lighting change. Real footage is the next step.
+  straight-down photo), blur, lighting change. Real sea footage is tested in §9.
 
 ## 4. Geolocation error budget
 
@@ -114,7 +120,8 @@ at a time to all 7,634 labelled boxes. Tilt is evaluated with a full pinhole-ray
 | **gimbal tilt ignored, 5° / 10° / 20°** | **5.8 m / 11.8 m / 24.2 m** | 6.6 / 13.8 / 30.7 m |
 
 At ~60 m altitude, **the nadir assumption is the biggest error source**. Reading the gimbal angle and doing the
-ray intersection is the first thing to fix before real use.
+ray intersection is the first thing to fix before real use. It is now implemented (`pitch_deg` in `geo.py`) and tested
+on real flights in §9.
 
 ## 5. INT8 quantisation (ONNX Runtime, CPU)
 
@@ -178,6 +185,84 @@ this flight). `?offline=1` draws a 20 m grid instead of map tiles, for field lap
 | YOLO11n fine-tuned | 1280 | FP16 | | | | | | |
 | YOLO11n fine-tuned | 1280 | INT8 | | | | | | |
 
+## 9. At sea (SeaDronesSee)
+
+Maritime search and rescue is the use case that matters most for this project, so the land recipe was repeated on
+**SeaDronesSee** (Varga et al., WACV 2022; CC0 1.0). Everything below is in
+[`scripts/sea_experiments.sh`](scripts/sea_experiments.sh).
+
+**Data.** A video-disjoint subset of Object Detection v2 ([`data/seadronessee_selection.json`](data/seadronessee_selection.json)):
+2,500 train images from 24 videos, 400 val (8 videos), **1,200 test images from 7 videos used nowhere else**, downscaled
+to 1920 px. Objects are even smaller than on land: at 640 px input the **median object is 7 px** and **59%** are under 8 px
+([`seadronessee_test_stats.json`](benchmarks/results/seadronessee_test_stats.json)).
+
+**Detection** (1,200 test images; COCO AP; source [`seadronessee.csv`](benchmarks/results/seadronessee.csv),
+[`seadronessee_two_class.csv`](benchmarks/results/seadronessee_two_class.csv)). For the COCO model, *person* is scored
+as swimmer and *boat* as boat; the other three sea classes have no COCO equivalent.
+
+| model | input | AP | AP small | **AP swimmer** | AP boat | CPU ms |
+|---|---|---|---|---|---|---|
+| YOLO11n COCO (2 classes) | 640 | 0.091 | 0.018 | 0.027 | 0.155 | 96 |
+| YOLO11n COCO (2 classes) | 1280 | 0.203 | 0.089 | 0.094 | 0.313 | 303 |
+| YOLO11n fine-tuned 4 epochs, 5 classes | 640 | 0.221 | 0.145 | 0.126 | 0.455 | 75 |
+| **YOLO11n fine-tuned 4 epochs, 5 classes** | **1280** | **0.266** | **0.207** | **0.185** | **0.503** | 259 |
+
+Per class at 1280: jetski 0.143, buoy 0.501, **life-saving appliances 0.000** (521 test boxes, the smallest class;
+four CPU epochs were not enough to learn it).
+
+**The official validation split leaks.** SeaDronesSee's val images come from the same videos as its train images.
+Scoring the same fine-tuned model on 400 official-val frames from *training* videos ("seen") vs the unseen test videos,
+and using the COCO model (which saw neither) as a control for scene difficulty:
+
+| two-class AP, 1280 px | unseen videos | seen videos | gap |
+|---|---|---|---|
+| COCO model (control) | 0.203 | 0.282 | +0.079 |
+| fine-tuned | 0.344 | 0.463 | +0.120 |
+| **swimmer AP:** COCO / fine-tuned | 0.094 / 0.185 | 0.112 / 0.295 | +0.018 / **+0.110** |
+
+About +0.09 of the fine-tuned swimmer gap is memorised scenery, not skill: reporting on the official split would
+overstate swimmer AP by roughly 50%.
+
+**Tracking on real footage.** Four SeaDronesSee-MOT clips (not used for training; 143–285 frames each, 30 fps,
+8.6–50 m altitude), fine-tuned model at 1280 px, confidence 0.1. Source [`tracking_sea.csv`](benchmarks/results/tracking_sea.csv).
+
+| clip | camera motion | ByteTrack IDF1 / switches | BoT-SORT + GMC IDF1 / switches |
+|---|---|---|---|
+| DJI_0055 | 0.09 m/frame | 0.501 / 46 | 0.478 / 40 |
+| DJI_0059 | 0.14 m/frame | **0.785 / 4** | 0.784 / 10 |
+| DJI_0057 | 0.08 m/frame | 0.662 / 3 | 0.648 / 2 |
+| DJI_0001_d3 | 0.01 m/frame | 0.767 / 7 | 0.708 / 7 |
+
+![Tracking swimmers and boats on real clip DJI_0059](docs/figures/sea_tracking.jpg)
+
+At 30 fps the camera moves 0.01–0.14 m per frame, the "slow" regime of the simulation in §3, where camera-motion
+compensation barely matters. The real footage agrees. DJI_0055 is hardest: 15 swimmers bunched together, 20 m up.
+
+**Geolocation on real flight logs.** The MOT clips come with the drone's GPS, altitude and gimbal angles, but no
+ground-truth positions for the swimmers. The test: a swimmer drifts at most about 1 m/s, so a good geolocation
+model should make tracked swimmers look nearly still on the map, even while the drone flies. The test uses the
+labelled boxes, so detector errors are excluded. Source [`geo_real.csv`](benchmarks/results/geo_real.csv),
+script [`benchmarks/geo_real.py`](benchmarks/geo_real.py).
+
+| clip | gimbal pitch | swimmer apparent speed, nadir model | **tilt-aware model** |
+|---|---|---|---|
+| DJI_0055 | 16° below horizon | 3.17 m/s | **1.04 m/s** (position spread 3.9 → 0.9 m) |
+| DJI_0057 | 45° | 2.44 m/s | 2.14 m/s |
+| DJI_0001_d3 | 29° | 0.54 m/s | 0.46 m/s |
+| DJI_0059 | 31° | 2.13 m/s | 3.63 m/s ✗ |
+
+The tilt-aware model ([`src/esa/geo.py`](src/esa/geo.py), ray / sea-surface intersection) wins on three of four clips.
+On DJI_0059 it gets worse. The drone accelerates sideways (up to 8.8 m/s) while yawing, and measuring the
+image rotation directly gives −30° where the log implies about +8°. When the logged attitude is wrong, a more exact
+model just follows the wrong numbers more exactly. Smoothing the log and searching for a clock offset did not help
+([`geo_real_diagnostics.csv`](benchmarks/results/geo_real_diagnostics.csv)). Lesson: **time-synchronised, trustworthy
+attitude telemetry** matters as much as the geometry.
+
+![The map app replaying real sea flight DJI_0055](docs/figures/map_sea.png)
+
+The map app replaying real flight DJI_0055: drone path from its own GPS (yellow), swimmers (red) and boats (blue)
+placed with the tilt-aware model.
+
 ## System
 
 ```mermaid
@@ -203,7 +288,7 @@ so a ground station that joins or reconnects still receives recent alerts.
 ## Reproduce
 
 ```bash
-pip install -r requirements-train.txt && pip install -e . && pytest -q        # 9 tests, also run in CI
+pip install -r requirements-train.txt && pip install -e . && pytest -q        # 13 tests, also run in CI
 
 # data: VisDrone2019-DET train + val
 python data/convert_visdrone.py --src /path/to/visdrone --out datasets/visdrone_yolo
@@ -214,6 +299,9 @@ python training/train.py configs/train/vis_y11n_640_cpu.yaml
 
 # everything in sections 2-7 on the fine-tuned model
 WEIGHTS=weights/ft_y11n_ep3.pt RAW_ANN=/path/to/VisDrone2019-DET-val/annotations bash scripts/phase2_experiments.sh
+
+# section 9 (sea): data download notes and every command, in order
+bash scripts/sea_experiments.sh
 
 # map app (laptop, no ROS)
 python web/backend/server.py --replay outputs/track_slow_botsort.jsonl
@@ -232,7 +320,7 @@ configs/       one YAML per experiment; tracker variants
 export/        ONNX + INT8 quantisation (CPU), TensorRT export (Jetson)
 benchmarks/    tracking scorer, geolocation sensitivity, Jetson benchmark, results CSVs
 tools/         sim_flight.py, detect_video.py (detect + track + geolocate), record_map.py
-scripts/       phase2_experiments.sh: every experiment above, in order
+scripts/       phase2_experiments.sh (land) and sea_experiments.sh (sea): every experiment, in order
 ros2_ws/       ROS 2 Humble package + end-to-end test (runs in CI)
 web/           FastAPI WebSocket bridge + React/MapLibre map
 src/esa/       shared code: geolocation, alerts, tegrastats reader, COCO evaluation
@@ -245,14 +333,15 @@ tests/         unit tests
 | dataset | used for | terms | citation |
 |---|---|---|---|
 | VisDrone2019-DET | people, vehicles | Research benchmark; the project's GitHub page states no formal licence (checked 2026-10-09). Treated as research-only; no images or weights derived from it are redistributed here. | Zhu et al., "Detection and Tracking Meet Drones Challenge", IEEE TPAMI 44(11), 2021 |
-| SeaDronesSee (planned) | swimmers, boats at sea | to be recorded on download | Varga et al., WACV 2022 |
+| SeaDronesSee ODv2 + MOT | swimmers, boats, jetskis, life-saving appliances, buoys at sea | CC0 1.0 (public domain dedication) | Varga et al., "SeaDronesSee: A Maritime Benchmark for Detecting Humans in Open Water", WACV 2022 |
 
-The figures and demo video show VisDrone imagery for illustration.
+The figures and demo video show VisDrone and SeaDronesSee imagery for illustration.
 
 ## Limitations
 
-CPU measurements only so far; short fine-tune on one dataset; tracking tested on a controlled simulation, not real
-continuous video; geolocation assumes a straight-down camera; ROS 2 tested in CI, not yet on the Jetson; not for operational use.
+CPU measurements only so far; short fine-tunes (3–4 CPU epochs); life-saving appliances not yet detected; real tracking
+tested on four short sea clips only; real geolocation checked by a plausibility test (no ground-truth positions), and it
+depends on attitude telemetry that is wrong on one of four clips; ROS 2 tested in CI, not yet on the Jetson; not for operational use.
 Details and failure images: [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
 ## Independence

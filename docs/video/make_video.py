@@ -648,10 +648,10 @@ def main():
         scene_text(
             "What this shows, honestly",
             [
-                "Off-the-shelf detectors miss most small objects in drone views",
+                "Off-the-shelf detectors miss most small objects in drone views, on land and at sea",
                 "Resolution and a short fine-tune recover the most; slicing costs too much here",
-                "Camera-motion compensation keeps IDs stable when the drone moves fast",
-                "Ignoring gimbal tilt costs more position accuracy than GPS error",
+                "The official sea val split shares videos with train: it overstates swimmer AP by ~50%",
+                "Tilt-aware geolocation helps on real flights only when the attitude log is trustworthy",
                 "INT8 works only with the detection head kept in FP32",
             ],
             "All numbers measured on public data; nothing estimated",
@@ -663,8 +663,8 @@ def main():
             "Next",
             [
                 "TensorRT FP16 / INT8 on Jetson Orin Nano: speed, watts, joules per frame",
-                "Real continuous footage: VisDrone-MOT and my own flights",
-                "Maritime search and rescue data (SeaDronesSee)",
+                "Time-synced attitude telemetry (the weak link in real geolocation)",
+                "Longer sea fine-tune; more life-saving-appliance examples",
             ],
             None,
         ),

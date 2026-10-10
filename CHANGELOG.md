@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.1.0 — 2026-10-11 — at sea
+
+Maritime module on SeaDronesSee (CC0 1.0), plus real-footage tracking and tilt-aware geolocation.
+
+- Video-disjoint SeaDronesSee subset (2,500 / 400 / 1,200 images); median object 7 px at 640 px input
+- Fine-tuned YOLO11n (4 CPU epochs): swimmer AP **0.027 → 0.185**, boat **0.155 → 0.503** vs the COCO model
+- Found and measured leakage in the official val split: swimmer AP overstated by **~50%**
+- Tracking on 4 real sea clips: IDF1 0.50–0.79; GMC no help at slow camera speeds, as the simulation predicted
+- Tilt-aware geolocation (`pitch_deg`, ray / ground intersection) in `geo.py`, the CLI and the ROS 2 node; on real flight
+  logs swimmer apparent drift **3.2 → 1.0 m/s**, worse on one clip with an inconsistent attitude log
+- Map app replays a real sea flight; demo video extended to 3 min with the sea results
+
 ## v1.0.0 — 2026-10-10
 
 First complete release: detection, tracking, geolocation, INT8 and failure analysis, all measured on public data (VisDrone). TensorRT/Jetson measurements are the next release.
@@ -19,4 +31,5 @@ All speeds are from a 2-vCPU machine without a GPU; tracking was tested on a sim
 ## Unreleased
 
 - TensorRT FP16/INT8 on Jetson Orin Nano (`benchmarks/run_on_jetson.sh`)
-- Real continuous footage (VisDrone-MOT, own flights); maritime data (SeaDronesSee)
+- Frame-rate, timestamped gimbal attitude (MAVLink) for real-world geolocation
+- Longer sea fine-tune (life-saving appliances)
