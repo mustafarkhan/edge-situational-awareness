@@ -14,6 +14,7 @@ true position. One error source at a time, so each row isolates one cause:
 
   python benchmarks/geo_sensitivity.py --flight outputs/flight_slow
 """
+
 from __future__ import annotations
 
 import argparse
@@ -85,28 +86,57 @@ def main():
     rows = []
 
     def add(source, level, errs, note=""):
-        rows.append({"error_source": source, "level": level, "median_m": round(float(np.median(errs)), 2),
-                     "p95_m": round(float(np.percentile(errs, 95)), 2), "max_m": round(float(errs.max()), 2),
-                     "n_points": len(errs), "note": note})
+        rows.append(
+            {
+                "error_source": source,
+                "level": level,
+                "median_m": round(float(np.median(errs)), 2),
+                "p95_m": round(float(np.percentile(errs, 95)), 2),
+                "max_m": round(float(errs.max()), 2),
+                "n_points": len(errs),
+                "note": note,
+            }
+        )
 
     for d in (2, 5):
+
         def p(t, px, py, truth, d=d):
             ang = rng.uniform(0, 2 * math.pi)
-            t2 = dict(t, lat=t["lat"] + d * math.cos(ang) / EARTH,
-                      lon=t["lon"] + d * math.sin(ang) / (EARTH * math.cos(math.radians(t["lat"]))))
+            t2 = dict(
+                t,
+                lat=t["lat"] + d * math.cos(ang) / EARTH,
+                lon=t["lon"] + d * math.sin(ang) / (EARTH * math.cos(math.radians(t["lat"]))),
+            )
             return pixel_to_latlon(px, py, args.w, args.h, cam_for(t2))
+
         add("gps", f"{d} m", run(p), "shifts every position by the same amount")
     for pct in (5, 10):
-        add("altitude", f"+{pct} %", run(lambda t, px, py, tr, pct=pct: pixel_to_latlon(
-            px, py, args.w, args.h, cam_for(dict(t, alt_m=t["alt_m"] * (1 + pct / 100)))) ),
-            "grows towards the image edges")
+        add(
+            "altitude",
+            f"+{pct} %",
+            run(
+                lambda t, px, py, tr, pct=pct: pixel_to_latlon(
+                    px, py, args.w, args.h, cam_for(dict(t, alt_m=t["alt_m"] * (1 + pct / 100)))
+                )
+            ),
+            "grows towards the image edges",
+        )
     for deg in (2, 5):
-        add("heading", f"{deg} deg", run(lambda t, px, py, tr, deg=deg: pixel_to_latlon(
-            px, py, args.w, args.h, cam_for(dict(t, heading_deg=deg)))), "grows towards the image edges")
+        add(
+            "heading",
+            f"{deg} deg",
+            run(
+                lambda t, px, py, tr, deg=deg: pixel_to_latlon(
+                    px, py, args.w, args.h, cam_for(dict(t, heading_deg=deg))
+                )
+            ),
+            "grows towards the image edges",
+        )
     for deg in (5, 10, 20):
         # truth = tilted camera; estimate = pipeline assuming nadir
         def p(t, px, py, truth, deg=deg):
             return pixel_to_latlon(px, py, args.w, args.h, cam_for(t))
+
         errs = []
         for f, px, py in pts:
             t = telem[f]
@@ -117,6 +147,7 @@ def main():
 
     alt = [t["alt_m"] for t in telem]
     import csv
+
     with open(args.out, "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=list(rows[0]))
         w.writeheader()

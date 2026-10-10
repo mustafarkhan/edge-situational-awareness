@@ -6,6 +6,7 @@ headless Chromium (Playwright) and records the page. Offline map style, so no ti
   cd web/frontend && npm install && npx vite build && cd ../..
   python tools/record_map.py --replay outputs/track_slow_botsort.jsonl --seconds 14 --out outputs/map_recording.mp4
 """
+
 from __future__ import annotations
 
 import argparse
@@ -34,20 +35,41 @@ def main():
     dist = REPO / "web" / "frontend" / "dist"
     if not dist.exists():
         sys.exit("build the frontend first: cd web/frontend && npm install && npx vite build")
-    backend = subprocess.Popen([sys.executable, str(REPO / "web/backend/server.py"), "--replay", args.replay,
-                                "--rate", str(args.rate), "--port", "8000", "--once"],
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    static = subprocess.Popen([sys.executable, "-m", "http.server", "5173", "--directory", str(dist)],
-                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    backend = subprocess.Popen(
+        [
+            sys.executable,
+            str(REPO / "web/backend/server.py"),
+            "--replay",
+            args.replay,
+            "--rate",
+            str(args.rate),
+            "--port",
+            "8000",
+            "--once",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    static = subprocess.Popen(
+        [sys.executable, "-m", "http.server", "5173", "--directory", str(dist)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     time.sleep(3)
     vid_dir = Path(tempfile.mkdtemp(prefix="claude-rec-"))
     try:
         from playwright.sync_api import sync_playwright
+
         with sync_playwright() as p:
-            browser = p.chromium.launch(args=["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
-            ctx = browser.new_context(viewport={"width": args.width, "height": args.height}, color_scheme="dark",
-                                      record_video_dir=str(vid_dir),
-                                      record_video_size={"width": args.width, "height": args.height})
+            browser = p.chromium.launch(
+                args=["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"]
+            )
+            ctx = browser.new_context(
+                viewport={"width": args.width, "height": args.height},
+                color_scheme="dark",
+                record_video_dir=str(vid_dir),
+                record_video_size={"width": args.width, "height": args.height},
+            )
             page = ctx.new_page()
             errors = []
             page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
@@ -66,11 +88,28 @@ def main():
                 print("browser console errors:", errors[:5])
         webm = next(vid_dir.glob("*.webm"))
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(webm), "-c:v", "libx264", "-pix_fmt",
-                        "yuv420p", "-r", "30", str(args.out)], check=True)
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-loglevel",
+                "error",
+                "-i",
+                str(webm),
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-r",
+                "30",
+                str(args.out),
+            ],
+            check=True,
+        )
         print("recording ->", args.out)
     finally:
-        backend.terminate(); static.terminate()
+        backend.terminate()
+        static.terminate()
         shutil.rmtree(vid_dir, ignore_errors=True)
 
 

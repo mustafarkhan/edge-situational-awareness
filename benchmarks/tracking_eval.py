@@ -12,6 +12,7 @@ pixel -> lat/lon chain under camera motion and altitude change.
   python benchmarks/tracking_eval.py --flight outputs/flight_slow --run outputs/track_slow_bytetrack.jsonl \
       --tag slow_bytetrack
 """
+
 from __future__ import annotations
 
 import argparse
@@ -81,8 +82,21 @@ def main():
             pos[(f, d["track_id"])] = (d["lat"], d["lon"])
 
     mh = mm.metrics.create()
-    s = mh.compute(acc, metrics=["mota", "idf1", "num_switches", "num_fragmentations", "recall", "precision",
-                                 "mostly_tracked", "num_unique_objects", "num_objects"], name="x").iloc[0]
+    s = mh.compute(
+        acc,
+        metrics=[
+            "mota",
+            "idf1",
+            "num_switches",
+            "num_fragmentations",
+            "recall",
+            "precision",
+            "mostly_tracked",
+            "num_unique_objects",
+            "num_objects",
+        ],
+        name="x",
+    ).iloc[0]
 
     ev = acc.mot_events
     matches = ev[ev["Type"].isin(["MATCH", "SWITCH"])]
@@ -93,21 +107,32 @@ def main():
         if p and o:
             errs.append(metres(o["lat"], o["lon"], *p))
             per_track[row["HId"]].append(p)
-    jitter = [float(np.mean([metres(np.mean([a for a, _ in v]), np.mean([b for _, b in v]), a, b) for a, b in v]))
-              for v in per_track.values() if len(v) >= 10]
+    jitter = [
+        float(np.mean([metres(np.mean([a for a, _ in v]), np.mean([b for _, b in v]), a, b) for a, b in v]))
+        for v in per_track.values()
+        if len(v) >= 10
+    ]
     fps = [r["fps"] for r in recs[3:]] or [0]
 
-    row = {"tag": args.tag, "tracker": args.tracker, "frames": len(recs),
-           "speed_m_per_frame": meta["speed_m_per_frame"], "gt_boxes": int(s["num_objects"]),
-           "gt_objects": int(s["num_unique_objects"]),
-           "MOTA": round(float(s["mota"]), 3), "IDF1": round(float(s["idf1"]), 3),
-           "id_switches": int(s["num_switches"]), "fragmentations": int(s["num_fragmentations"]),
-           "recall": round(float(s["recall"]), 3), "precision": round(float(s["precision"]), 3),
-           "mostly_tracked": int(s["mostly_tracked"]),
-           "geo_err_median_m": round(float(np.median(errs)), 2) if errs else "",
-           "geo_err_p95_m": round(float(np.percentile(errs, 95)), 2) if errs else "",
-           "track_jitter_median_m": round(float(np.median(jitter)), 2) if jitter else "",
-           "cpu_fps_median": round(float(np.median(fps)), 1)}
+    row = {
+        "tag": args.tag,
+        "tracker": args.tracker,
+        "frames": len(recs),
+        "speed_m_per_frame": meta["speed_m_per_frame"],
+        "gt_boxes": int(s["num_objects"]),
+        "gt_objects": int(s["num_unique_objects"]),
+        "MOTA": round(float(s["mota"]), 3),
+        "IDF1": round(float(s["idf1"]), 3),
+        "id_switches": int(s["num_switches"]),
+        "fragmentations": int(s["num_fragmentations"]),
+        "recall": round(float(s["recall"]), 3),
+        "precision": round(float(s["precision"]), 3),
+        "mostly_tracked": int(s["mostly_tracked"]),
+        "geo_err_median_m": round(float(np.median(errs)), 2) if errs else "",
+        "geo_err_p95_m": round(float(np.percentile(errs, 95)), 2) if errs else "",
+        "track_jitter_median_m": round(float(np.median(jitter)), 2) if jitter else "",
+        "cpu_fps_median": round(float(np.median(fps)), 1),
+    }
     out = Path(args.out)
     new = not out.exists()
     with out.open("a", newline="") as fh:

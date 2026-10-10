@@ -9,16 +9,15 @@ Splits: official train -> train, official val -> val, official test-dev -> test.
 VisDrone annotation line: x,y,w,h,score,category,truncation,occlusion
   score == 0 means 'ignored region'; category 0 = ignored, 11 = others -> both skipped.
 """
+
 import argparse
 from collections import Counter
 from pathlib import Path
 
+from _common import link_or_copy, write_dataset_yaml, write_label, yolo_row
 from PIL import Image
 
-from _common import link_or_copy, write_dataset_yaml, write_label, yolo_row
-
-NAMES = ["pedestrian", "people", "bicycle", "car", "van", "truck",
-         "tricycle", "awning-tricycle", "bus", "motor"]
+NAMES = ["pedestrian", "people", "bicycle", "car", "van", "truck", "tricycle", "awning-tricycle", "bus", "motor"]
 SPLITS = {"train": "VisDrone2019-DET-train", "val": "VisDrone2019-DET-val", "test": "VisDrone2019-DET-test-dev"}
 
 

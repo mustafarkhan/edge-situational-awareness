@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use this work, please cite it as below."
+title: "Edge AI for Real-Time Situational Awareness from Drones"
+authors:
+  - family-names: Khan
+    given-names: Mustafa R.
+repository-code: "https://github.com/mustafarkhan/edge-situational-awareness"
+license: AGPL-3.0
+version: 1.0.0
+date-released: 2026-10-10
+keywords: [edge AI, drones, UAV, object detection, multi-object tracking, NVIDIA Jetson, INT8, search and rescue]

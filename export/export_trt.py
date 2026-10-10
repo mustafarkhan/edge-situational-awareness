@@ -8,6 +8,7 @@ version and JetPack it was built on; an engine built on your desktop will not lo
 INT8 needs calibration images: Ultralytics uses the dataset's *val* split for this
 (never test). --fraction controls how much of val is used; a few hundred images is enough.
 """
+
 import argparse
 import shutil
 from pathlib import Path
@@ -29,8 +30,7 @@ def main():
     print("ONNX:", onnx)
 
     for p in args.precisions:
-        kwargs = dict(format="engine", imgsz=args.imgsz, batch=1, device=0,
-                      half=(p == "fp16"), int8=(p == "int8"))
+        kwargs = dict(format="engine", imgsz=args.imgsz, batch=1, device=0, half=(p == "fp16"), int8=(p == "int8"))
         if p == "int8":
             kwargs.update(data=args.data, fraction=args.fraction)
         built = Path(YOLO(str(w)).export(**kwargs))

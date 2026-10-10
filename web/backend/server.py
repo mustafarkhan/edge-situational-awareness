@@ -7,9 +7,9 @@ Two sources:
   python web/backend/server.py --replay outputs/run1.jsonl --rate 10
 Then open the React app (web/frontend) which connects to ws://localhost:8000/ws.
 """
+
 import argparse
 import asyncio
-import json
 import threading
 from pathlib import Path
 
@@ -76,8 +76,7 @@ def ros_thread(loop):
     class Bridge(Node):
         def __init__(self):
             super().__init__("web_bridge")
-            self.create_subscription(String, "tracks_geo",
-                                     lambda m: loop.call_soon_threadsafe(_offer, m.data), 10)
+            self.create_subscription(String, "tracks_geo", lambda m: loop.call_soon_threadsafe(_offer, m.data), 10)
 
     rclpy.init()
     rclpy.spin(Bridge())

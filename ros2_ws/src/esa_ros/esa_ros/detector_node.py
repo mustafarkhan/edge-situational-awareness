@@ -7,6 +7,7 @@ Publishes
 
 Requires `pip install -e .` of the repo root (for the shared `esa` package) in the same environment.
 """
+
 import json
 import threading
 import time
@@ -25,9 +26,18 @@ class DetectorNode(Node):
     def __init__(self):
         super().__init__("detector")
         p = self.declare_parameter
-        p("model", "best.engine"); p("source", "0"); p("imgsz", 640); p("conf", 0.25)
-        p("tracker", "bytetrack.yaml"); p("lat", 60.15); p("lon", 24.95); p("alt_m", 60.0)
-        p("hfov_deg", 70.0); p("heading_deg", 0.0); p("alert_labels", ["swimmer"]); p("alert_min_frames", 5)
+        p("model", "best.engine")
+        p("source", "0")
+        p("imgsz", 640)
+        p("conf", 0.25)
+        p("tracker", "bytetrack.yaml")
+        p("lat", 60.15)
+        p("lon", 24.95)
+        p("alt_m", 60.0)
+        p("hfov_deg", 70.0)
+        p("heading_deg", 0.0)
+        p("alert_labels", ["swimmer"])
+        p("alert_min_frames", 5)
         g = lambda n: self.get_parameter(n).value  # noqa: E731
 
         self.model = YOLO(g("model"), task="detect")
@@ -42,11 +52,22 @@ class DetectorNode(Node):
 
     def run(self):
         t_prev = time.perf_counter()
-        for i, r in enumerate(self.model.track(self.source, stream=True, persist=True, tracker=self.tracker,
-                                               imgsz=self.imgsz, conf=self.conf, verbose=False)):
+        for i, r in enumerate(
+            self.model.track(
+                self.source,
+                stream=True,
+                persist=True,
+                tracker=self.tracker,
+                imgsz=self.imgsz,
+                conf=self.conf,
+                verbose=False,
+            )
+        ):
             if not rclpy.ok():
                 break
-            now = time.perf_counter(); fps = 1.0 / max(now - t_prev, 1e-6); t_prev = now
+            now = time.perf_counter()
+            fps = 1.0 / max(now - t_prev, 1e-6)
+            t_prev = now
             stamp = self.get_clock().now().to_msg()
             h, w = r.orig_shape
             ids = r.boxes.id.int().tolist() if r.boxes.id is not None else [None] * len(r.boxes)
@@ -55,8 +76,9 @@ class DetectorNode(Node):
             arr.header.stamp = stamp
             arr.header.frame_id = "camera"
             dets = []
-            for (x1, y1, x2, y2), c, s, tid in zip(r.boxes.xyxy.tolist(), r.boxes.cls.int().tolist(),
-                                                   r.boxes.conf.tolist(), ids):
+            for (x1, y1, x2, y2), c, s, tid in zip(
+                r.boxes.xyxy.tolist(), r.boxes.cls.int().tolist(), r.boxes.conf.tolist(), ids
+            ):
                 d = Detection2D()
                 d.header = arr.header
                 d.id = "" if tid is None else str(tid)
@@ -69,15 +91,32 @@ class DetectorNode(Node):
                 d.results.append(hyp)
                 arr.detections.append(d)
                 lat, lon = pixel_to_latlon((x1 + x2) / 2, (y1 + y2) / 2, w, h, self.cam)
-                dets.append({"track_id": tid, "label": r.names[c], "conf": round(s, 3),
-                             "lat": round(lat, 7), "lon": round(lon, 7)})
+                dets.append(
+                    {
+                        "track_id": tid,
+                        "label": r.names[c],
+                        "conf": round(s, 3),
+                        "lat": round(lat, 7),
+                        "lon": round(lon, 7),
+                    }
+                )
 
             self.pub_det.publish(arr)
             new_alerts = self.alerts.update(dets)
-            self.pub_geo.publish(String(data=json.dumps({
-                "frame": i, "t": time.time(), "fps": round(fps, 1),
-                "drone": {"lat": self.cam.lat, "lon": self.cam.lon},
-                "detections": dets, "alerts": new_alerts})))
+            self.pub_geo.publish(
+                String(
+                    data=json.dumps(
+                        {
+                            "frame": i,
+                            "t": time.time(),
+                            "fps": round(fps, 1),
+                            "drone": {"lat": self.cam.lat, "lon": self.cam.lon},
+                            "detections": dets,
+                            "alerts": new_alerts,
+                        }
+                    )
+                )
+            )
             for a in new_alerts:
                 self.pub_alert.publish(String(data=json.dumps(a)))
                 self.get_logger().warn(a["message"])

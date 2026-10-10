@@ -1,5 +1,9 @@
 # Edge AI for Real-Time Situational Awareness from Drones
 
+[![CI](https://github.com/mustafarkhan/edge-situational-awareness/actions/workflows/ci.yml/badge.svg)](https://github.com/mustafarkhan/edge-situational-awareness/actions/workflows/ci.yml)
+[![ROS 2](https://github.com/mustafarkhan/edge-situational-awareness/actions/workflows/ros2.yml/badge.svg)](https://github.com/mustafarkhan/edge-situational-awareness/actions/workflows/ros2.yml)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+
 Detecting, tracking and geolocating people and vehicles in drone video, built for embedded
 deployment (NVIDIA Jetson). Every number below was measured on public data, and each one links to
 the script and results file that produced it.

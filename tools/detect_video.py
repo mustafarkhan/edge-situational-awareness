@@ -6,6 +6,7 @@ frame. Works on a laptop too. The web backend can replay the file onto the live 
 
 --source 0 uses the first USB camera. On the Jetson, pass the .engine file as --model.
 """
+
 import argparse
 import json
 import sys
@@ -34,30 +35,40 @@ def main():
     ap.add_argument("--alt", type=float, default=60.0, help="metres above sea/ground")
     ap.add_argument("--hfov", type=float, default=70.0)
     ap.add_argument("--heading", type=float, default=0.0)
-    ap.add_argument("--telemetry", default=None,
-                    help="JSONL, one line per frame with lat, lon, alt_m, hfov_deg, heading_deg "
-                         "(e.g. from a flight log or tools/sim_flight.py). Overrides the fixed values above.")
+    ap.add_argument(
+        "--telemetry",
+        default=None,
+        help="JSONL, one line per frame with lat, lon, alt_m, hfov_deg, heading_deg "
+        "(e.g. from a flight log or tools/sim_flight.py). Overrides the fixed values above.",
+    )
     ap.add_argument("--alert", nargs="*", default=["swimmer"], help="labels that raise alerts")
     ap.add_argument("--alert-min-frames", type=int, default=5)
-    ap.add_argument("--no-track", action="store_true",
-                    help="detection only. Use for frames that are not continuous video: ByteTrack only "
-                         "reports confirmed tracks, so on sparse frames it silently drops most detections")
+    ap.add_argument(
+        "--no-track",
+        action="store_true",
+        help="detection only. Use for frames that are not continuous video: ByteTrack only "
+        "reports confirmed tracks, so on sparse frames it silently drops most detections",
+    )
     args = ap.parse_args()
 
     source = int(args.source) if args.source.isdigit() else args.source
     model = YOLO(args.model, task="detect")
     cam = CameraGeo(args.lat, args.lon, args.alt, args.hfov, args.heading)
     alerts = AlertManager(set(args.alert), args.alert_min_frames)
-    telem = ([json.loads(l) for l in Path(args.telemetry).read_text().splitlines() if l.strip()]
-             if args.telemetry else None)
+    telem = (
+        [json.loads(l) for l in Path(args.telemetry).read_text().splitlines() if l.strip()] if args.telemetry else None
+    )
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     writer = None
 
     with open(args.out, "w") as fh:
         t_prev = time.perf_counter()
         common = dict(stream=True, imgsz=args.imgsz, conf=args.conf, max_det=500, verbose=False)
-        results = (model.predict(source, **common) if args.no_track
-                   else model.track(source, persist=True, tracker=args.tracker, **common))
+        results = (
+            model.predict(source, **common)
+            if args.no_track
+            else model.track(source, persist=True, tracker=args.tracker, **common)
+        )
         for i, r in enumerate(results):
             now = time.perf_counter()
             fps = 1.0 / max(now - t_prev, 1e-6)
@@ -68,16 +79,35 @@ def main():
                 cam = CameraGeo(t["lat"], t["lon"], t["alt_m"], t.get("hfov_deg", args.hfov), t.get("heading_deg", 0.0))
             ids = r.boxes.id.int().tolist() if r.boxes.id is not None else [None] * len(r.boxes)
             dets = []
-            for (x1, y1, x2, y2), c, s, tid in zip(r.boxes.xyxy.tolist(), r.boxes.cls.int().tolist(),
-                                                   r.boxes.conf.tolist(), ids):
+            for (x1, y1, x2, y2), c, s, tid in zip(
+                r.boxes.xyxy.tolist(), r.boxes.cls.int().tolist(), r.boxes.conf.tolist(), ids
+            ):
                 lat, lon = pixel_to_latlon((x1 + x2) / 2, (y1 + y2) / 2, w, h, cam)
-                dets.append({"track_id": tid, "cls": c, "label": r.names[c], "conf": round(s, 3),
-                             "bbox": [round(v, 1) for v in (x1, y1, x2, y2)],
-                             "lat": round(lat, 7), "lon": round(lon, 7)})
+                dets.append(
+                    {
+                        "track_id": tid,
+                        "cls": c,
+                        "label": r.names[c],
+                        "conf": round(s, 3),
+                        "bbox": [round(v, 1) for v in (x1, y1, x2, y2)],
+                        "lat": round(lat, 7),
+                        "lon": round(lon, 7),
+                    }
+                )
             new_alerts = alerts.update(dets)
-            fh.write(json.dumps({"frame": i, "t": time.time(), "fps": round(fps, 1),
-                                 "drone": {"lat": cam.lat, "lon": cam.lon},
-                                 "detections": dets, "alerts": new_alerts}) + "\n")
+            fh.write(
+                json.dumps(
+                    {
+                        "frame": i,
+                        "t": time.time(),
+                        "fps": round(fps, 1),
+                        "drone": {"lat": cam.lat, "lon": cam.lon},
+                        "detections": dets,
+                        "alerts": new_alerts,
+                    }
+                )
+                + "\n"
+            )
             for a in new_alerts:
                 print("ALERT:", a["message"])
             if args.save_video:

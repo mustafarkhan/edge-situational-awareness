@@ -18,6 +18,7 @@ Evaluate each file with training/evaluate_zeroshot.py (same metric as everything
   python export/quantize_onnx.py --weights weights/ft_y11n_ep3.pt --imgsz 1280 \
       --calib-dir datasets/visdrone_yolo/images/train --n-calib 128
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,8 +27,7 @@ from pathlib import Path
 
 import numpy as np
 import onnx
-from onnxruntime.quantization import (CalibrationDataReader, CalibrationMethod, QuantFormat, QuantType,
-                                      quantize_static)
+from onnxruntime.quantization import CalibrationDataReader, CalibrationMethod, QuantFormat, QuantType, quantize_static
 from onnxruntime.quantization.shape_inference import quant_pre_process
 from PIL import Image
 from ultralytics import YOLO
@@ -62,7 +62,7 @@ def head_nodes(model: onnx.ModelProto, head_prefix: str) -> list[str]:
     for n in model.graph.node:
         if not n.name.startswith(head_prefix):
             continue
-        rest = n.name[len(head_prefix):]
+        rest = n.name[len(head_prefix) :]
         if "/" not in rest or rest.startswith("dfl/"):
             out.append(n.name)
     return out
@@ -87,20 +87,28 @@ def main():
     base = onnx.load(str(fp32))
     input_name = base.graph.input[0].name
     # node names look like "/model.23/dfl/conv/Conv"; the highest index is the Detect head
-    head_idx = max(int(n.name.split("/")[1].split(".")[1]) for n in base.graph.node
-                   if n.name.startswith("/model."))
+    head_idx = max(int(n.name.split("/")[1].split(".")[1]) for n in base.graph.node if n.name.startswith("/model."))
     excluded = head_nodes(base, f"/model.{head_idx}/")
     files = sorted(Path(args.calib_dir).glob("*.jpg"))
     random.Random(args.seed).shuffle(files)
     calib = files[: args.n_calib]
-    print(f"calibration: {len(calib)} train images; head = model.{head_idx}, {len(excluded)} head nodes kept FP32 in variant 2")
+    print(
+        f"calibration: {len(calib)} train images; head = model.{head_idx}, {len(excluded)} head nodes kept FP32 in variant 2"
+    )
 
     for tag, exclude in (("int8_full", []), ("int8_headfp32", excluded)):
         out = fp32.with_name(fp32.stem.replace("_fp32", f"_{tag}") + ".onnx")
-        quantize_static(str(pre), str(out), Reader(calib, args.imgsz, input_name),
-                        quant_format=QuantFormat.QDQ, per_channel=True,
-                        activation_type=QuantType.QUInt8, weight_type=QuantType.QInt8,
-                        calibrate_method=CalibrationMethod.MinMax, nodes_to_exclude=exclude)
+        quantize_static(
+            str(pre),
+            str(out),
+            Reader(calib, args.imgsz, input_name),
+            quant_format=QuantFormat.QDQ,
+            per_channel=True,
+            activation_type=QuantType.QUInt8,
+            weight_type=QuantType.QInt8,
+            calibrate_method=CalibrationMethod.MinMax,
+            nodes_to_exclude=exclude,
+        )
         # keep Ultralytics' metadata (class names, stride, imgsz) so YOLO() can load the file
         q = onnx.load(str(out))
         del q.metadata_props[:]

@@ -5,6 +5,7 @@
 Every key in the config except 'model' is passed straight to Ultralytics model.train().
 The config is copied into the run folder so every result can be traced to its settings.
 """
+
 import shutil
 import sys
 from pathlib import Path
