@@ -7,13 +7,17 @@ set -o pipefail
 source /opt/ros/humble/setup.bash
 source "$(dirname "$0")/install/setup.bash"
 OUT=$(mktemp -d)
-SAMPLES=$(python3 -c "import ultralytics, os; print(os.path.join(os.path.dirname(ultralytics.__file__), 'assets'))")
 MODEL=${MODEL:-yolo11n.pt}
 mkdir -p "$OUT/frames"
+for img in bus zidane; do  # Ultralytics' standard sample images (people + vehicles)
+  curl -fsSL -o "$OUT/$img.jpg" "https://ultralytics.com/images/$img.jpg" ||
+    curl -fsSL -o "$OUT/$img.jpg" "https://github.com/ultralytics/assets/releases/download/v0.0.0/$img.jpg"
+done
 for i in $(seq -w 1 15); do
-  cp "$SAMPLES/bus.jpg" "$OUT/frames/${i}a.jpg"; cp "$SAMPLES/zidane.jpg" "$OUT/frames/${i}b.jpg"
+  cp "$OUT/bus.jpg" "$OUT/frames/${i}a.jpg" && cp "$OUT/zidane.jpg" "$OUT/frames/${i}b.jpg" || exit 1
 done
 echo "frames: $(ls "$OUT/frames" | wc -l)  model: $MODEL"
+[ "$(ls "$OUT/frames" | wc -l)" -eq 30 ] || { echo "::error title=setup::sample images missing"; exit 1; }
 
 annotate() {  # level title file: one annotation with the file's first 60 lines
   local body
