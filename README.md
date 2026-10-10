@@ -280,8 +280,9 @@ flowchart LR
 
 The ROS 2 node (`ros2_ws/`) is **tested end to end in CI** whenever the ROS or shared code changes: the [ROS 2 workflow](.github/workflows/ros2.yml)
 installs ROS 2 Humble on a GitHub runner, builds the package with colcon, runs the node on sample images and
-checks that `/detections` (standard `vision_msgs`), `/tracks_geo` and `/alerts` are published and that the node
-exits cleanly ([`ros2_ws/test_node.sh`](ros2_ws/test_node.sh)). That test caught two real bugs: an abort at
+checks that `/detections` (standard `vision_msgs`), `/tracks_geo` and `/alerts` are published, that objects get real
+coordinates, and that the node exits cleanly. It runs twice: camera straight down, and gimbal tilted 45°
+(tilt-aware geolocation) ([`ros2_ws/test_node.sh`](ros2_ws/test_node.sh)). That test caught two real bugs: an abort at
 shutdown, and alerts lost by subscribers that connect late. `/alerts` is now latched (transient local, last 10),
 so a ground station that joins or reconnects still receives recent alerts.
 
