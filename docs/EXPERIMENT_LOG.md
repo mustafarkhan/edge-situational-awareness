@@ -194,6 +194,31 @@ Small-object AP is the metric that matters; overall mAP hides the problem.
 - **Conclusion:** the model is right and fixes the dominant error; its accuracy is now limited by attitude telemetry.
   Next: gimbal attitude at frame rate with timestamps (MAVLink), or estimate yaw from the image.
 
+### 2026-10-11 — sea fine-tune (YOLO11n, 4 CPU epochs) and the checkpoint mix-up
+- **Change vs parent:** same land recipe (train 640, run 1280), with `warmup_epochs 1` and `close_mosaic 1`
+  (lessons from the land run). Config `configs/train/sds_y11n_640_cpu.yaml`.
+- **Result (1,200 unseen-video test images, native 5 classes, 1280 px):** AP 0.266, AP50 0.488, AP_small 0.207,
+  swimmer 0.185, boat 0.503, jetski 0.143, buoy 0.501, life-saving appliances 0.000. COCO model, two-class view:
+  swimmer 0.094 at 1280, 0.027 at 640.
+- **Bug:** the evaluation queue waited on `pgrep -f training/train.py`, but the resumed process (after a VM restart)
+  was `YOLO(last.pt).train(resume=True)`, so the queue scored the epoch-1 checkpoint as "final". Caught because the
+  640 rows matched the epoch-1 row exactly. Fix: wait on the resume command; print epoch / optimizer state / size of
+  the checkpoint before scoring (a finished checkpoint shows epoch -1, no optimizer, 5.4 MB). Wrong rows deleted,
+  everything after it re-run.
+- **Conclusion:** keep. Life-saving appliances need more epochs or more examples.
+
+### 2026-10-11 — measuring the official-split leakage
+- Same fine-tuned model, 1280 px, two-class view: unseen test videos AP 0.344, "seen" (official-val frames from
+  training videos) 0.463, gap +0.120. COCO model as a control for scene difficulty: 0.203 vs 0.282, gap +0.079.
+  Leakage ≈ **+0.04 AP overall**; for swimmers +0.110 vs +0.018, i.e. ≈ +0.09 on 0.185, **about 50% inflation**.
+- **Conclusion:** never report on the official val split for this dataset; the video-disjoint split is committed.
+
+### 2026-10-11 — tracking on real sea footage
+- 4 SeaDronesSee-MOT clips, fine-tuned model at 1280, conf 0.1, ByteTrack vs BoT-SORT+GMC.
+  IDF1 0.50 / 0.79 / 0.66 / 0.77 (ByteTrack) vs 0.48 / 0.78 / 0.65 / 0.71. Camera motion 0.01–0.14 m/frame.
+- **Conclusion:** consistent with the simulation's slow regime (GMC matters only when the camera moves fast).
+  DJI_0055 (15 bunched swimmers, 20 m) has 40–46 ID switches; that is a detection/crowding problem, not motion.
+
 ---
 
 ## Template

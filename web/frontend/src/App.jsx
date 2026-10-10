@@ -128,7 +128,8 @@ export default function App() {
       m.getSource("dronepath").setData(fc([{ type: "Feature", properties: {},
         geometry: { type: "LineString", coordinates: dronePath.current } }]));
     }
-    const dets = msg.detections ?? [];
+    // detections above the horizon (tilted camera) have no ground position: keep them off the map
+    const dets = (msg.detections ?? []).filter((d) => d.lat != null && d.lon != null);
     for (const d of dets) if (d.track_id != null) seenTracks.current.add(d.track_id);
     setUniqueTracks(seenTracks.current.size);
     for (const d of dets) {

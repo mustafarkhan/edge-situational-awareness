@@ -1,0 +1,9 @@
+tag,tracker,frames,speed_m_per_frame,gt_boxes,gt_objects,MOTA,IDF1,id_switches,fragmentations,recall,precision,mostly_tracked,geo_err_median_m,geo_err_p95_m,track_jitter_median_m,cpu_fps_median
+sea_DJI_0055_bytetrack,bytetrack,143,0.091,2145,15,0.205,0.501,46,116,0.651,0.605,7,,,,4.0
+sea_DJI_0055_botsort,botsort,143,0.091,2145,15,0.238,0.478,40,110,0.683,0.616,7,,,,3.8
+sea_DJI_0059_bytetrack,bytetrack,143,0.144,1144,8,0.589,0.785,4,18,0.829,0.778,6,,,,4.1
+sea_DJI_0059_botsort,botsort,143,0.144,1144,8,0.583,0.784,10,14,0.848,0.768,6,,,,3.8
+sea_DJI_0057_bytetrack,bytetrack,143,0.077,656,8,0.404,0.662,3,12,0.596,0.761,2,,,,4.2
+sea_DJI_0057_botsort,botsort,143,0.077,656,8,0.363,0.648,2,10,0.593,0.723,2,,,,3.8
+sea_DJI_0001_d3_bytetrack,bytetrack,285,0.01,1276,5,0.69,0.767,7,11,0.859,0.84,4,,,,4.0
+sea_DJI_0001_d3_botsort,botsort,285,0.01,1276,5,0.673,0.708,7,12,0.865,0.823,4,,,,3.9

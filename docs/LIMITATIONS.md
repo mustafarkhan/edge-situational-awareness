@@ -7,15 +7,18 @@ What this project does not show yet, and where the model fails. Every failure be
 
 - **CPU only so far.** All speeds come from a 2-vCPU cloud VM without a GPU; repeated runs vary by about ±10%.
   They compare configurations; they are not Jetson performance. The Jetson table is still empty.
-- **Short fine-tune.** 3 CPU epochs at 640 px; the learning-rate warm-up spans the whole run. Treat the numbers
-  as a lower bound on what fine-tuning gives.
-- **One dataset.** VisDrone (Chinese cities, specific cameras and altitudes). Performance on Nordic scenes,
-  sea, winter or other sensors is unknown. The planned maritime data (SeaDronesSee) is not in yet.
+- **Short fine-tunes.** Land: 3 CPU epochs at 640 px (the learning-rate warm-up spans the whole run). Sea: 4 CPU
+  epochs; life-saving appliances (the smallest class) are not detected at all yet (AP 0.000). Treat the numbers as a
+  lower bound on what fine-tuning gives.
+- **Two datasets, both small slices.** Land: VisDrone (Chinese cities). Sea: a 2,500-image training subset of
+  SeaDronesSee (lakes and the North Sea, summer, mostly DJI cameras), images downscaled from 4K to 1920 px.
+  Performance in Nordic winter, rough seas, at night or with thermal cameras is unknown.
+- **SeaDronesSee 'ignored' regions** are dropped from the labels, so detections inside them count as false positives.
 - **Ten classes mapped to three** (person / two-wheeler / vehicle) so pretrained and fine-tuned models can be
   compared. Tricycles are left out of that ground truth.
-- **Tracking was tested on a controlled simulation**, not real continuous video: a camera flown over one still,
-  labelled frame. Objects don't move on their own, there is no blur or lighting change, and the frame is treated
-  as a straight-down photo. It measures the tracker's response to camera motion, and nothing else.
+- **Real tracking: four short sea clips only** (5–10 s each, slow camera motion). The fast-camera result (motion
+  compensation matters) still comes only from the controlled simulation over one still, labelled frame; no real
+  footage with fast camera motion and identity labels has been tested yet.
 - **ROS 2 tested in CI, not on the Jetson.** The node builds and runs end to end on ROS 2 Humble (GitHub runner,
   CPU, sample images); it has not yet run on the Jetson with a camera.
 - **Demo footage is held out, not foreign.** Sequences 9999951 and 9999955 were removed before training, but
@@ -24,8 +27,19 @@ What this project does not show yet, and where the model fails. Every failure be
 
 ## Geolocation
 
-The pipeline assumes a straight-down camera over flat ground with exact telemetry. Measured effect of
-breaking each assumption (drone at 57–69 m, 70° lens, median over 7,634 objects):
+The pipeline now models gimbal pitch and heading (ray / flat-surface intersection). Remaining limits:
+
+- **Attitude telemetry decides accuracy.** On real footage the tilt-aware model fixed the big error on a very oblique
+  clip, but was worse than the straight-down model on a clip where the drone accelerated sideways while turning: the
+  logged heading did not match the scene's rotation in the image, and objects ~50 m ahead magnify attitude errors.
+  Needs frame-rate, timestamped gimbal attitude (or yaw estimated from the image).
+- **Field of view assumed** (65.5° for the SeaDronesSee DJI clips); no lens distortion; no camera roll; flat surface
+  (exact at sea, approximate over land); box centre used as the object's position.
+- **No ground-truth object positions** exist for real footage, so the real-data test uses a physical plausibility check
+  (swimmers move ≲ 1 m/s), not measured error in metres.
+
+Measured effect of each error source in the controlled simulation (drone at 57–69 m, 70° lens, median over
+7,634 objects; this table motivated the tilt-aware model):
 
 | assumption broken | error |
 |---|---|
@@ -35,7 +49,7 @@ breaking each assumption (drone at 57–69 m, 70° lens, median over 7,634 objec
 | **gimbal tilted 10°, treated as straight down** | **11.8 m** |
 | gimbal tilted 20° | 24.2 m |
 
-Fix: read gimbal attitude from telemetry (MAVLink) and intersect the camera ray with the ground (and terrain).
+The ray intersection is now implemented (`src/esa/geo.py`); terrain is not.
 
 ## Observed failures
 

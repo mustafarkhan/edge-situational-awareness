@@ -129,16 +129,16 @@ def fig_leakage(two: pd.DataFrame):
 def fig_geo_real(geo: pd.DataFrame):
     plt = mpl_dark()
     g = geo[(geo.object == "swimmer") & geo.model.isin(["nadir", "tilt-aware"])]
-    clips = list(dict.fromkeys(g.clip))
+    clips = list(dict.fromkeys(g["clip"]))
     fig, ax = plt.subplots(figsize=(18, 8.6))
     w = 0.36
     for j, (model, col) in enumerate((("nadir", "#90a4ae"), ("tilt-aware", "#ffc400"))):
-        vals = [float(g[(g.clip == c) & (g.model == model)]["apparent_speed_median_mps"].iloc[0]) for c in clips]
+        vals = [float(g[(g["clip"] == c) & (g.model == model)]["apparent_speed_median_mps"].iloc[0]) for c in clips]
         xs = [i + (j - 0.5) * w for i in range(len(clips))]
         b = ax.bar(xs, vals, w * 0.92, color=col, label="straight-down camera" if model == "nadir" else "tilt-aware")
         for bb, v in zip(b, vals):
             ax.text(bb.get_x() + bb.get_width() / 2, v, f"{v:.1f}", ha="center", va="bottom", fontsize=18)
-    pitch = {c: g[g.clip == c]["gimbal_pitch_deg"].iloc[0].split("-")[0] for c in clips}
+    pitch = {c: g[g["clip"] == c]["gimbal_pitch_deg"].iloc[0].split("-")[0] for c in clips}
     ax.set_xticks(range(len(clips)), [f"{c}\npitch {pitch[c]}°" for c in clips])
     ax.axhline(1.0, color="#eceef1", ls="--", lw=1.5)
     ax.text(len(clips) - 0.5, 1.05, "a swimmer moves ≲ 1 m/s", ha="right", va="bottom", fontsize=16)
