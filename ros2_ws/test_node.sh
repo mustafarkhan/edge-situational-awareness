@@ -36,7 +36,8 @@ timeout 300 ros2 run esa_ros detector_node --ros-args \
   -p model:="$MODEL" -p source:="$OUT/frames" -p imgsz:=640 -p conf:=0.25 \
   -p alert_labels:="['person']" -p alert_min_frames:=1 \
   -p lat:=60.15 -p lon:=24.95 -p alt_m:=60.0 -p hfov_deg:=70.0 > "$OUT/node.log" 2>&1
-echo "node exit code: $?"
+NODE_RC=$?
+echo "node exit code: $NODE_RC"
 sleep 2
 for job in $(jobs -p); do kill "$job" 2>/dev/null; done
 wait 2>/dev/null
@@ -50,6 +51,9 @@ for t in detections tracks_geo alerts; do
     echo "FAIL /$t received nothing"; annotate error "/$t received nothing" "$OUT/$t.txt"; fail=1
   fi
 done
-annotate "$([ $fail = 0 ] && echo notice || echo error)" "node log (last 40 lines)" "$OUT/node_tail.log"
+if [ "$NODE_RC" != 0 ] || grep -q "terminate called\|Aborted" "$OUT/node.log"; then
+  echo "FAIL node did not exit cleanly (code $NODE_RC)"; fail=1
+fi
+annotate "$([ $fail = 0 ] && echo notice || echo error)" "node log (last 40 lines), exit code $NODE_RC" "$OUT/node_tail.log"
 cat "$OUT/node.log"
 exit $fail

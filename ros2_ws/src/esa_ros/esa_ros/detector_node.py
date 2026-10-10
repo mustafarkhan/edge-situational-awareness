@@ -13,6 +13,7 @@ import threading
 import time
 
 import rclpy
+from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from std_msgs.msg import String
 from ultralytics import YOLO
@@ -125,13 +126,21 @@ class DetectorNode(Node):
 def main():
     rclpy.init()
     node = DetectorNode()
-    spin = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
+    # Inference runs in the main thread; ROS callbacks (parameters, services) are serviced by an
+    # executor in a background thread. Shut down in order -- stop the executor, join its thread,
+    # then destroy the node -- or the C++ layer aborts at exit ("terminate called without an
+    # active exception"), which CI caught in the first end-to-end run.
+    executor = SingleThreadedExecutor()
+    executor.add_node(node)
+    spin = threading.Thread(target=executor.spin, daemon=True)
     spin.start()
     try:
         node.run()
     except KeyboardInterrupt:
         pass
     finally:
+        executor.shutdown()
+        spin.join(timeout=5)
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
