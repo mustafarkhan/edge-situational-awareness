@@ -207,6 +207,23 @@ A PyTorch model is flexible but slow on embedded hardware. **TensorRT** compiles
 5. Run one variant twice, an hour apart. If the numbers differ by more than a few percent, your setup isn't stable; find out why before going on.
 6. `python benchmarks/make_tables.py` and paste the result into the README.
 
+### No Jetson yet? INT8 on CPU first
+
+TensorRT needs NVIDIA hardware, but the INT8 question (how much accuracy does quantisation cost?)
+can be answered on any CPU with ONNX Runtime:
+
+```bash
+python export/quantize_onnx.py --weights weights/ft_y11n_ep3.pt --imgsz 1280 \
+  --calib-dir datasets/visdrone_yolo/images/train --n-calib 128
+python training/evaluate_zeroshot.py --model weights/ft_y11n_ep3_1280_int8_headfp32.onnx --class-map visdrone \
+  --data configs/datasets/visdrone.yaml --imgsz 1280 --tag onnx_int8_headfp32_1280 --out benchmarks/results/quantization.csv
+```
+
+It builds two INT8 models. One quantises everything; the other keeps the detection head's
+post-processing in FP32. YOLO's last layer concatenates box coordinates (0–1280) with class
+scores (0–1) into one tensor, and a single 8-bit range cannot hold both. Compare the two and you
+will see the failure for yourself. That is the kind of thing to know before the Jetson arrives.
+
 ### Checkpoint
 
 The main results table: one row per model × resolution × precision, with mAP, FPS, p50 and p99 latency, watts, joules per frame and peak temperature, all measured on the Jetson in one documented power mode. This table is the most valuable thing in the repo.
@@ -250,7 +267,22 @@ A model is not a product. A detector outputs boxes per frame, with no memory. A 
    cd web/frontend && npm install && npm run dev
    ```
    Open the printed URL. You should see detections, trails and alerts on the map.
-3. **ROS 2 on the Jetson** (Humble, inside a ROS container):
+3. **Controlled tracking test (no video needed).** Real multi-object-tracking data with per-object
+   identities is large and hard to get. Instead, fly a simulated camera over one fully labelled
+   frame: every object's identity and ground position is then known exactly, so ID switches and
+   position error can be scored precisely, and camera speed becomes a dial.
+   ```bash
+   python tools/sim_flight.py --image <labelled val image> --speed 24 --frames 120 --out outputs/flight_fast
+   python tools/detect_video.py --model <weights> --source outputs/flight_fast/frames --imgsz 1280 --conf 0.1 \
+     --tracker botsort.yaml --telemetry outputs/flight_fast/telemetry.jsonl --out outputs/track_fast_botsort.jsonl
+   python benchmarks/tracking_eval.py --flight outputs/flight_fast --run outputs/track_fast_botsort.jsonl --tag fast_botsort
+   python benchmarks/geo_sensitivity.py --flight outputs/flight_fast
+   ```
+   Run it with `bytetrack.yaml`, `configs/trackers/botsort_nogmc.yaml` and `botsort.yaml`. The last two
+   differ in one setting, camera-motion compensation, so the comparison isolates it. Know what this
+   test cannot tell you: objects don't move on their own, and the source frame is treated as a
+   straight-down photo.
+4. **ROS 2 on the Jetson** (Humble, inside a ROS container):
    ```bash
    sudo apt install -y ros-humble-vision-msgs        # if not already in the image
    cd ros2_ws && colcon build && source install/setup.bash
@@ -259,8 +291,8 @@ A model is not a product. A detector outputs boxes per frame, with no memory. A 
    python web/backend/server.py --ros # bridge to the map
    ros2 bag record /detections /tracks_geo /alerts
    ```
-4. Replay the bag (`ros2 bag play <folder>`) with the bridge running and confirm the map shows the same run.
-5. Optional: DeepStream for several cameras at once. Only do this if everything else is done; it's a separate learning curve.
+5. Replay the bag (`ros2 bag play <folder>`) with the bridge running and confirm the map shows the same run.
+6. Optional: DeepStream for several cameras at once. Only do this if everything else is done; it's a separate learning curve.
 
 ### Checkpoint
 

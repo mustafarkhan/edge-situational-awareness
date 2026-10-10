@@ -1,0 +1,15 @@
+dimension,bucket,objects,recall
+size,16-32 px,15154,0.4941
+size,32-64 px,8743,0.7278
+size,8-16 px,9720,0.2628
+size,< 8 px,2210,0.0977
+size,>= 64 px,2932,0.8694
+occlusion,heavy (50-100%),3086,0.2259
+occlusion,none,16810,0.6308
+occlusion,partial (1-50%),18863,0.4172
+class,person,13969,0.3385
+class,two-wheeler,7750,0.2345
+class,vehicle,17040,0.7408
+light,daylight,37612,0.4948
+light,dusk/night,1147,0.4874
+overall,all,38759,0.4946

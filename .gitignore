@@ -21,3 +21,5 @@ ros2_ws/log/
 !docs/figures/.gitkeep
 weights/
 datasets/
+!docs/video/demo_video.mp4
+configs/datasets/*.yaml

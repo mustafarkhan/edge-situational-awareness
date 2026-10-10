@@ -2,26 +2,34 @@
 
 The rule that overrides everything here: **only say numbers you measured, and know how you measured them.** Interviewers who know edge AI will ask one follow-up question about any number you quote. If the answer is "I'm not sure how that was computed", the whole project loses credibility.
 
-## The 60-second version (with the numbers measured so far)
+## The 60-second version (all numbers measured)
 
-> I'm building an open-source edge AI pipeline for situational awareness from drone video, aimed at
-> running on an NVIDIA Jetson.
+> I built an open-source edge AI pipeline that detects, tracks and geolocates people and vehicles in drone
+> video, aimed at an NVIDIA Jetson.
 >
-> I started with the data instead of the model. On the VisDrone validation set, 38,000 labelled objects,
-> the median object is 11 pixels across at YOLO's default input size, and 92% count as small. So I
-> measured small-object AP, not headline mAP.
+> I started with the data. In VisDrone, the median object is 11 pixels across at YOLO's default input,
+> so I measured small-object AP instead of headline mAP. A pretrained YOLO11n scores 0.04. Higher input
+> resolution and a short fine-tune took it to 0.18, better than a model three times larger in half the time.
 >
-> A COCO-pretrained YOLO11n scores 0.04 on small objects. Doubling the input resolution triples that.
-> Sliced inference also helps, but costs nearly three times as much time as just running at 1280, so on
-> these images I'd skip it. A short fine-tune on drone data had the biggest effect: 0.17, four times the
-> starting point and on par with a model three times larger. On held-out footage it finds half the
-> labelled objects.
+> Then the system around it. In a controlled flight test where every object's true identity is known,
+> camera-motion compensation raised identity accuracy from 0.33 to 0.57 when the drone moves fast. An error
+> budget showed that ignoring a 10-degree gimbal tilt costs 12 metres of position accuracy, more than GPS
+> error. And INT8 quantisation produced zero detections until I kept the detection head in FP32; then it cost
+> 5% accuracy for a 20% speed-up and a model a third the size.
 >
-> I also hit two real bugs, an evaluation metric silently returning -1 and a tracker hiding detections
-> on sparse frames, and documented both. Next is TensorRT on the Jetson, where I'll measure speed,
-> watts and energy per frame.
+> I documented where it fails, mainly tiny objects and false alarms at night. Next is TensorRT on the Jetson.
 
-The two bug stories are in `docs/EXPERIMENT_LOG.md`. Rehearse them: symptom, cause, fix, how you verified.
+## Stories to rehearse (symptom → cause → fix → how you verified)
+
+1. **AP = -1.0.** Overall AP came out as -1 while other metrics looked fine. pycocotools' summary hard-codes
+   100 detections per image; dense VisDrone scenes need 500. Computed AP from the precision array; regression test.
+2. **The tracker that hid detections.** Tracking on held-out VisDrone frames gave a median of 1 detection per frame
+   against 20–100 objects. The frames were seconds apart, and trackers only output confirmed tracks. Detection-only
+   mode restored 8–76 per frame. Lesson: check the data's time structure before choosing an algorithm.
+3. **INT8 with zero detections.** Predicted from the architecture (box coordinates and scores share one tensor),
+   confirmed by experiment, fixed by excluding 48 post-processing nodes from quantisation.
+4. **No tracking data available.** Built a controlled test instead, where the ground truth is exact, and was explicit
+   about what it can't show.
 
 ## The 5-minute walkthrough
 

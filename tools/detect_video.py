@@ -34,6 +34,9 @@ def main():
     ap.add_argument("--alt", type=float, default=60.0, help="metres above sea/ground")
     ap.add_argument("--hfov", type=float, default=70.0)
     ap.add_argument("--heading", type=float, default=0.0)
+    ap.add_argument("--telemetry", default=None,
+                    help="JSONL, one line per frame with lat, lon, alt_m, hfov_deg, heading_deg "
+                         "(e.g. from a flight log or tools/sim_flight.py). Overrides the fixed values above.")
     ap.add_argument("--alert", nargs="*", default=["swimmer"], help="labels that raise alerts")
     ap.add_argument("--alert-min-frames", type=int, default=5)
     ap.add_argument("--no-track", action="store_true",
@@ -45,6 +48,8 @@ def main():
     model = YOLO(args.model, task="detect")
     cam = CameraGeo(args.lat, args.lon, args.alt, args.hfov, args.heading)
     alerts = AlertManager(set(args.alert), args.alert_min_frames)
+    telem = ([json.loads(l) for l in Path(args.telemetry).read_text().splitlines() if l.strip()]
+             if args.telemetry else None)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     writer = None
 
@@ -58,6 +63,9 @@ def main():
             fps = 1.0 / max(now - t_prev, 1e-6)
             t_prev = now
             h, w = r.orig_shape
+            if telem:
+                t = telem[min(i, len(telem) - 1)]
+                cam = CameraGeo(t["lat"], t["lon"], t["alt_m"], t.get("hfov_deg", args.hfov), t.get("heading_deg", 0.0))
             ids = r.boxes.id.int().tolist() if r.boxes.id is not None else [None] * len(r.boxes)
             dets = []
             for (x1, y1, x2, y2), c, s, tid in zip(r.boxes.xyxy.tolist(), r.boxes.cls.int().tolist(),

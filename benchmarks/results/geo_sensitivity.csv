@@ -1,0 +1,10 @@
+error_source,level,median_m,p95_m,max_m,n_points,note
+gps,2 m,2.0,2.0,2.0,7634,shifts every position by the same amount
+gps,5 m,5.0,5.0,5.0,7634,shifts every position by the same amount
+altitude,+5 %,1.43,2.32,2.61,7634,grows towards the image edges
+altitude,+10 %,2.85,4.64,5.22,7634,grows towards the image edges
+heading,2 deg,0.99,1.62,1.82,7634,grows towards the image edges
+heading,5 deg,2.49,4.04,4.55,7634,grows towards the image edges
+gimbal tilt (ignored),5 deg,5.84,6.64,7.31,7634,nadir assumption vs true ray intersection
+gimbal tilt (ignored),10 deg,11.84,13.81,15.35,7634,nadir assumption vs true ray intersection
+gimbal tilt (ignored),20 deg,24.17,30.7,34.78,7634,nadir assumption vs true ray intersection
