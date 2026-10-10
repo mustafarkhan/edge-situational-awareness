@@ -13,7 +13,8 @@ the script and results file that produced it.
 🎬 **[Demo video (2 min)](docs/video/demo_video.mp4)**, rendered only from real outputs by `docs/video/make_video.py`.
 
 > **Status (October 2026).** Data analysis, detector experiments, fine-tuning, tracking,
-> geolocation, INT8 quantisation, failure analysis and the live map are done, measured on CPU.
+> geolocation, INT8 quantisation, failure analysis and the live map are done, measured on CPU; the ROS 2
+> node is tested end to end on ROS 2 Humble in CI.
 > **Still to come:** TensorRT on a Jetson Orin Nano (speed, watts, joules per frame) with
 > [one command](benchmarks/run_on_jetson.sh), then real continuous footage and maritime data.
 
@@ -192,13 +193,17 @@ flowchart LR
     WS --> MAP[React + MapLibre map]
 ```
 
-The ROS 2 node (`ros2_ws/`) is written but has **not been run yet**: ROS packages were not installable on the
-build machine. It is part of the Jetson step.
+The ROS 2 node (`ros2_ws/`) is **tested end to end in CI** whenever the ROS or shared code changes: the [ROS 2 workflow](.github/workflows/ros2.yml)
+installs ROS 2 Humble on a GitHub runner, builds the package with colcon, runs the node on sample images and
+checks that `/detections` (standard `vision_msgs`), `/tracks_geo` and `/alerts` are published and that the node
+exits cleanly ([`ros2_ws/test_node.sh`](ros2_ws/test_node.sh)). That test caught two real bugs: an abort at
+shutdown, and alerts lost by subscribers that connect late. `/alerts` is now latched (transient local, last 10),
+so a ground station that joins or reconnects still receives recent alerts.
 
 ## Reproduce
 
 ```bash
-pip install -r requirements-train.txt && pip install -e . && pytest -q        # 9 tests
+pip install -r requirements-train.txt && pip install -e . && pytest -q        # 9 tests, also run in CI
 
 # data: VisDrone2019-DET train + val
 python data/convert_visdrone.py --src /path/to/visdrone --out datasets/visdrone_yolo
@@ -227,7 +232,7 @@ export/        ONNX + INT8 quantisation (CPU), TensorRT export (Jetson)
 benchmarks/    tracking scorer, geolocation sensitivity, Jetson benchmark, results CSVs
 tools/         sim_flight.py, detect_video.py (detect + track + geolocate), record_map.py
 scripts/       phase2_experiments.sh: every experiment above, in order
-ros2_ws/       ROS 2 Humble package (not yet run)
+ros2_ws/       ROS 2 Humble package + end-to-end test (runs in CI)
 web/           FastAPI WebSocket bridge + React/MapLibre map
 src/esa/       shared code: geolocation, alerts, tegrastats reader, COCO evaluation
 docs/          experiment log, limitations, model card, demo video
@@ -246,7 +251,7 @@ The figures and demo video show VisDrone imagery for illustration.
 ## Limitations
 
 CPU measurements only so far; short fine-tune on one dataset; tracking tested on a controlled simulation, not real
-continuous video; geolocation assumes a straight-down camera; ROS node not yet run; not for operational use.
+continuous video; geolocation assumes a straight-down camera; ROS 2 tested in CI, not yet on the Jetson; not for operational use.
 Details and failure images: [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
 ## Independence

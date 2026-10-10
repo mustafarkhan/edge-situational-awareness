@@ -16,7 +16,8 @@ What this project does not show yet, and where the model fails. Every failure be
 - **Tracking was tested on a controlled simulation**, not real continuous video: a camera flown over one still,
   labelled frame. Objects don't move on their own, there is no blur or lighting change, and the frame is treated
   as a straight-down photo. It measures the tracker's response to camera motion, and nothing else.
-- **ROS 2 node not run.** ROS packages could not be installed on the build machine.
+- **ROS 2 tested in CI, not on the Jetson.** The node builds and runs end to end on ROS 2 Humble (GitHub runner,
+  CPU, sample images); it has not yet run on the Jetson with a camera.
 - **Demo footage is held out, not foreign.** Sequences 9999951 and 9999955 were removed before training, but
   other VisDrone sequences may show the same city.
 - **Not a safety-certified system.** Research software, not for operational rescue use.
