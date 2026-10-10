@@ -52,8 +52,9 @@ class DetectorNode(Node):
         # Alerts are latched (transient-local, last 10 kept): a ground station that connects or
         # reconnects late still receives recent alerts. Found when the end-to-end test missed alerts
         # fired before its subscriber had connected.
-        alert_qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE,
-                               durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        alert_qos = QoSProfile(
+            depth=10, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.TRANSIENT_LOCAL
+        )
         self.pub_alert = self.create_publisher(String, "alerts", alert_qos)
         self.get_logger().info(f"model={g('model')} source={self.source}")
 
