@@ -28,9 +28,13 @@ annotate() {  # level title file: one annotation with the file's first 60 lines
 # Message types are given explicitly: without them, `ros2 topic echo` exits at once if the topic
 # does not exist yet, and these subscribers start before the node.
 declare -A TYPES=([detections]=vision_msgs/msg/Detection2DArray [tracks_geo]=std_msgs/msg/String [alerts]=std_msgs/msg/String)
-for t in "${!TYPES[@]}"; do
+for t in detections tracks_geo; do
   timeout 300 ros2 topic echo --once "/$t" "${TYPES[$t]}" > "$OUT/$t.txt" 2>&1 &
 done
+# alerts are latched (transient local): subscribe with matching QoS, so alerts published before
+# this subscriber finished connecting are still delivered, as they would be to a late ground station
+timeout 300 ros2 topic echo --once --qos-durability transient_local --qos-reliability reliable \
+  /alerts std_msgs/msg/String > "$OUT/alerts.txt" 2>&1 &
 sleep 3
 timeout 300 ros2 run esa_ros detector_node --ros-args \
   -p model:="$MODEL" -p source:="$OUT/frames" -p imgsz:=640 -p conf:=0.25 \
@@ -54,6 +58,6 @@ done
 if [ "$NODE_RC" != 0 ] || grep -q "terminate called\|Aborted" "$OUT/node.log"; then
   echo "FAIL node did not exit cleanly (code $NODE_RC)"; fail=1
 fi
-annotate "$([ $fail = 0 ] && echo notice || echo error)" "node log (last 40 lines), exit code $NODE_RC" "$OUT/node_tail.log"
+annotate "$([ $fail = 0 ] && echo notice || echo error)" "node log (last 40 lines) - exit code $NODE_RC" "$OUT/node_tail.log"
 cat "$OUT/node.log"
 exit $fail
