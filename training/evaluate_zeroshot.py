@@ -86,6 +86,7 @@ def main():
     ap.add_argument("--class-map", choices=["coco", "visdrone"], default="coco",
                     help="'coco' for pretrained weights, 'visdrone' for weights fine-tuned on VisDrone")
     ap.add_argument("--limit", type=int, default=0, help="evaluate only the first N images (0 = all)")
+    ap.add_argument("--device", default="cpu", help="'cpu', or 0 for the first CUDA GPU (e.g. on the Jetson)")
     ap.add_argument("--tag", required=True)
     ap.add_argument("--out", default=str(REPO / "benchmarks" / "results" / "zeroshot.csv"))
     args = ap.parse_args()
@@ -102,11 +103,19 @@ def main():
 
     if args.sahi:
         preds, times = predict_sahi(args.model, gt, root, slice_size=args.slice, overlap=args.overlap,
-                                    device="cpu", conf=args.conf, imgsz=args.imgsz)
+                                    device="cpu" if args.device == "cpu" else f"cuda:{args.device}", conf=args.conf, imgsz=args.imgsz)
     else:
-        preds, times = predict_ultralytics(args.model, gt, root, imgsz=args.imgsz, device="cpu",
+        preds, times = predict_ultralytics(args.model, gt, root, imgsz=args.imgsz,
+                                           device="cpu" if args.device == "cpu" else int(args.device),
                                            max_det=args.max_dets, conf=args.conf)
-    m = coco_evaluate(gt_path, remap(preds, args.class_map), max_dets=args.max_dets)
+    mapped = remap(preds, args.class_map)
+    if mapped:
+        m = coco_evaluate(gt_path, mapped, max_dets=args.max_dets)
+    else:
+        # a model that outputs nothing scores zero; record it rather than crash (see INT8 experiment)
+        print("WARNING: model produced no detections at all -> all AP = 0")
+        m = {k: 0.0 for k in ["AP", "AP50", "AP75", "AP_small", "AP_medium", "AP_large",
+                              "AP_person", "AP_two_wheeler", "AP_vehicle"]}
 
     row = {"tag": args.tag, "split": args.split, "n_images": len(gt["images"]), "model": Path(args.model).name,
            "imgsz": args.imgsz, "sahi": args.sahi, "slice": args.slice if args.sahi else "",

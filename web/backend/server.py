@@ -51,9 +51,13 @@ async def broadcaster():
 async def replay(path: str, rate: float):
     lines = Path(path).read_text().splitlines()
     while True:  # loop forever so the demo keeps running
+        while not clients:  # start each pass only once someone is watching, so viewers see frame 0
+            await asyncio.sleep(0.1)
         for line in lines:
             await queue.put(line)
             await asyncio.sleep(1.0 / rate)
+        if ARGS.once:  # single pass (used for recordings): leave the last frame on screen
+            return
 
 
 def _offer(msg: str):
@@ -96,6 +100,7 @@ if __name__ == "__main__":
     src.add_argument("--replay")
     src.add_argument("--ros", action="store_true")
     ap.add_argument("--rate", type=float, default=10.0, help="replay frames per second")
+    ap.add_argument("--once", action="store_true", help="replay a single pass instead of looping")
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=8000)
     ARGS = ap.parse_args()

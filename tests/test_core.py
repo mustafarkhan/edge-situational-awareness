@@ -2,6 +2,7 @@
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -60,3 +61,31 @@ def test_overall_ap_works_with_large_max_dets(tmp_path):
     preds = [{"image_id": 1, "category_id": 1, "bbox": a["bbox"], "score": 1.0} for a in gt["annotations"]]
     m = coco_evaluate(p, preds, max_dets=500)
     assert m["AP"] == pytest.approx(1.0) and m["AP_small"] == pytest.approx(1.0)
+
+
+def test_iou_distance_matches_hand_calculation():
+    sys.path.insert(0, str(ROOT / "benchmarks"))
+    from tracking_eval import iou_distance
+    d = iou_distance([[0, 0, 10, 10]], [[0, 0, 10, 10], [5, 0, 10, 10], [50, 50, 5, 5]])
+    assert d[0, 0] == pytest.approx(0.0)
+    assert np.isnan(d[0, 1])          # IoU 1/3 < 0.5 -> not allowed to match
+    assert np.isnan(d[0, 2])
+    assert iou_distance([], [[0, 0, 1, 1]]).shape == (0, 1)
+
+
+def test_tilt_zero_equals_nadir_model():
+    """With no tilt, the full ray-intersection model must agree with the pipeline's nadir model."""
+    sys.path.insert(0, str(ROOT / "benchmarks"))
+    from geo_sensitivity import tilted_ground_point
+    cam = CameraGeo(60.0, 25.0, 60, 70)
+    for px, py in [(0, 0), (480, 270), (959, 539), (100, 400)]:
+        assert tilted_ground_point(px, py, 960, 540, cam, 0.0) == pytest.approx(
+            pixel_to_latlon(px, py, 960, 540, cam), abs=1e-9)
+
+
+def test_tilt_shifts_image_centre_by_alt_tan_angle():
+    sys.path.insert(0, str(ROOT / "benchmarks"))
+    from geo_sensitivity import tilted_ground_point
+    cam = CameraGeo(60.0, 25.0, 60, 70)
+    lat, _ = tilted_ground_point(480, 270, 960, 540, cam, 10.0)
+    assert (lat - 60.0) * 111_320 == pytest.approx(60 * np.tan(np.radians(10)), rel=1e-6)

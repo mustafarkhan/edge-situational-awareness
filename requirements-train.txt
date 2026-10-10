@@ -1,11 +1,18 @@
-# Training / evaluation machine (desktop GPU or cloud). Pin exact versions once things work,
-# then record them in the README so your results are reproducible.
+# Training / evaluation machine (CPU or GPU). Versions used for the published results:
+# ultralytics 8.4.174, sahi 0.12.8, torch 2.14.1, onnxruntime 1.29.0, motmetrics 1.4.0, Python 3.13.
 ultralytics>=8.3
 sahi>=0.11
 pycocotools>=2.0.7
+onnx
+onnxslim
+onnxruntime          # INT8 quantisation and ONNX evaluation on CPU
+motmetrics           # tracking metrics (MOTA, IDF1)
 matplotlib
 pandas
 tabulate
 pyyaml
 tqdm
-wandb          # optional: experiment tracking
+fastapi              # web backend
+uvicorn[standard]
+playwright           # optional: tools/record_map.py (needs a Chromium install)
+wandb                # optional: experiment tracking

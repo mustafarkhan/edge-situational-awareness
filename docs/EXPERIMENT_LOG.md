@@ -3,8 +3,8 @@
 One entry per run or decision, written the same day. All numbers below were measured;
 nothing is estimated. Raw rows live in `benchmarks/results/*.csv`.
 
-**Environment for the 2026-10-09 runs:** cloud VM, 2 vCPU, 7 GB RAM, **no GPU**.
-Ultralytics 8.4.174, SAHI 0.12.8, PyTorch 2.14.1 (CPU), Python 3.13.
+**Environment (2026-10-09 and 10-10 runs):** cloud VM, 2 vCPU, 7 GB RAM, **no GPU**.
+Ultralytics 8.4.174, SAHI 0.12.8, PyTorch 2.14.1 (CPU), ONNX Runtime 1.29.0, motmetrics 1.4.0, Python 3.13.
 Jetson measurements (Lab 3) are still to come.
 
 ---
@@ -66,7 +66,7 @@ Small-object AP is the metric that matters; overall mAP hides the problem.
 - **Resolution beats model size for small objects:** YOLO11n at 1280 (AP_small 0.124, 317 ms)
   beats YOLO11s at 640 (0.075, 200 ms).
 - **SAHI helps but is not worth it here:** slicing raised YOLO11n's AP_small from 0.041 to 0.110, but
-  at 882 ms per image; plain 1280 inference gets 0.124 in 317 ms. VisDrone frames are only ~1360–2000 px
+  at 882 ms per image; plain 1280 inference gets 0.124 in 317 ms. VisDrone val frames are only 960–1920 px
   wide, so 640 px slices add little detail over a 1280 input. SAHI should matter more on 4K footage;
   that is a hypothesis to test, not a result.
 - The YOLO11s + SAHI run was stopped to free the CPU for fine-tuning.
@@ -98,6 +98,59 @@ Small-object AP is the metric that matters; overall mAP hides the problem.
 ### 2026-10-09 — held-out frames (demo)
 - 21 frames sampled from sequence 9999951 (every 16th), fine-tuned YOLO11n, 1280 px, conf 0.25, detection only.
 - Greedy class-agnostic matching at IoU ≥ 0.5: **422 of 836 labelled objects found (50%)**.
+
+### 2026-10-10 — epoch 3 (training interrupted twice)
+- The VM restarted overnight (training 37% into epoch 3) and again at 13:00. Resumed both times from the
+  epoch-2 checkpoint with `YOLO(last.pt).train(resume=True)`, the second time fully detached (`setsid nohup`).
+  Fixed seed + deterministic mode reproduced the exact same loss values after resuming, a nice check.
+- **Result (val):** AP_small 0.087 at 640 and **0.182 at 1280** (epoch 2: 0.079 / 0.169). Overall AP 0.253.
+  Large-object AP 0.378, still well below the pretrained 0.58 (see failure analysis).
+- Held-out frames (21 frames of sequence 9999951): 448 of 836 objects found (epoch 2: 422).
+
+### 2026-10-10 — controlled tracking test
+- **Problem:** no continuous drone video with identity labels was downloadable (only GitHub/PyPI/npm reachable).
+- **Method:** `tools/sim_flight.py` flies a 960×540 camera in an ellipse over val image 0000129_02411_d_0000138
+  (near-vertical, 186 labelled objects), zooming to vary altitude 57–69 m. Static objects with exact identities
+  and positions → exact ID-switch and position-error scoring. Two speeds × three trackers, same detections settings
+  (fine-tuned model, 1280 px, conf 0.1). The two BoT-SORT variants differ only in `gmc_method`.
+- **Result:** see README §3. Fast camera: IDF1 0.33 (ByteTrack), 0.34 (BoT-SORT no GMC), **0.57** (BoT-SORT + GMC);
+  ID switches 244 / 301 / 77. Slow camera: 0.66 / 0.68 / 0.70, switches 15 / 7 / 3.
+- **Conclusion:** use BoT-SORT with motion compensation on drones. Without it, recall at speed also halves (31% vs 59%)
+  because unconfirmed tracks hide their detections.
+- **Bug found on the way:** `motmetrics` 1.4 calls `np.asfarray`, removed in NumPy 2. Wrote the IoU distance by hand
+  (`benchmarks/tracking_eval.py:iou_distance`, unit-tested).
+
+### 2026-10-10 — geolocation error budget
+- With perfect telemetry the pipeline's error is 0.14 m median: that validates the code, nothing more.
+- `benchmarks/geo_sensitivity.py` perturbs one input at a time over 7,634 boxes. Gimbal tilt is evaluated with a
+  pinhole ray / flat-ground intersection (unit test: zero tilt reproduces the nadir model; centre shift = alt·tan θ).
+- **Result:** GPS 5 m → 5.0 m; altitude +10% → 2.9 m; heading 5° → 2.5 m; **tilt 10° ignored → 11.8 m**.
+- **Conclusion:** the straight-down assumption is the largest error source; fix it first.
+
+### 2026-10-10 — INT8 on CPU (ONNX Runtime)
+- **Hypothesis:** quantising everything will break the scores, because box coordinates (0–1280) and class scores (0–1)
+  share one output tensor and one 8-bit range.
+- **Method:** `export/quantize_onnx.py`, static QDQ, per-channel weights, MinMax calibration on 128 train images.
+- **Result (548 val, 1280 px):** FP32 ONNX AP_small 0.181, 251 ms; INT8 everything: **no detections at all**, 162 ms;
+  INT8 with 48 head post-processing nodes in FP32: **0.172, 201 ms, 3.7 MB** (vs 11.1 MB).
+- **Conclusion:** hypothesis confirmed. −5% small-object AP for −20% time and −66% size. Next: does TensorRT INT8 behave the same?
+- The first version of the exclusion list (84 nodes) also kept the head's conv-block activations in FP32; narrowed to
+  post-processing only.
+
+### 2026-10-10 — failure analysis
+- `data/failure_analysis.py`, raw VisDrone annotations (for occlusion levels), class-agnostic matching at IoU 0.5.
+- Recall by size at model input: < 8 px 10%, 8–16 px 26%, 16–32 px 49%, 32–64 px 73%, ≥ 64 px 87%.
+- Recall by occlusion: none 63%, partial 42%, heavy 23%. By class: vehicle 74%, person 34%, two-wheeler 23%.
+- Night (17 images, brightness < 70; threshold picked from the brightness histogram's gap and checked by eye):
+  recall unchanged (48.7% vs 49.5%) but **precision 44% vs 70%**: duplicate and phantom boxes.
+- Worst images (recall 13–16%): low oblique view down a long road; a near-ground view where *large* close-up people and
+  scooters were missed (explains the large-object AP drop after fine-tuning); a toll plaza with booths occluding vehicles.
+
+### 2026-10-10 — map app recording
+- Real React app, real FastAPI backend, headless Chromium via Playwright (`tools/record_map.py`). Map tiles unreachable,
+  so added an offline style (`?offline=1`, 20 m grid).
+- Two small bugs fixed: alerts appeared twice because the replay looped (app now resets on frame 0; backend gained
+  `--once`); the view centred on the drone's first position, so the flight drifted off-screen (`?center=&zoom=`).
 
 ---
 

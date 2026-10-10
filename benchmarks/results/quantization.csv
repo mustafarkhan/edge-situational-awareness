@@ -1,0 +1,4 @@
+tag,split,n_images,model,imgsz,sahi,slice,conf,cpu_ms_per_image_median,AP,AP50,AP75,AP_small,AP_medium,AP_large,AP_person,AP_two_wheeler,AP_vehicle
+onnx_fp32_1280,val,548,ft_y11n_ep3_1280_fp32.onnx,1280,False,,0.01,250.6,0.251,0.4661,0.2301,0.1814,0.3718,0.3852,0.1486,0.0949,0.5094
+onnx_int8_full_1280,val,548,ft_y11n_ep3_1280_int8_full.onnx,1280,False,,0.01,162.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+onnx_int8_headfp32_1280,val,548,ft_y11n_ep3_1280_int8_headfp32.onnx,1280,False,,0.01,200.9,0.239,0.4453,0.2203,0.172,0.3505,0.3682,0.1403,0.0802,0.4966
