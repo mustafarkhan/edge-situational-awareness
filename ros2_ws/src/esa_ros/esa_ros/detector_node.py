@@ -1,5 +1,16 @@
 """ROS 2 node: camera/video -> TensorRT YOLO -> tracker -> topics.
 
+Subscribes (only with use_telemetry:=true; otherwise position and attitude are fixed parameters)
+  fix           sensor_msgs/NavSatFix   drone latitude/longitude (e.g. remap from /mavros/global_position/global)
+  rel_alt       std_msgs/Float64        height above ground/sea in metres (/mavros/global_position/rel_alt)
+  heading       std_msgs/Float64        camera heading, degrees from north (/mavros/global_position/compass_hdg
+                                        for a camera fixed to the airframe)
+  gimbal_pitch  std_msgs/Float64        degrees BELOW the horizon, 90 = straight down (DJI/MAVLink report
+                                        -90 for straight down: negate before publishing)
+  heading and gimbal_pitch are optional: until a message arrives, the heading_deg / pitch_deg parameters
+  are used. Any value older than telemetry_timeout_s means no coordinates are published (null), rather
+  than coordinates computed from stale telemetry.
+
 Publishes
   /detections  vision_msgs/Detection2DArray  (standard message type: other ROS tools understand it)
   /tracks_geo  std_msgs/String (JSON)        (detections + lat/lon, consumed by the web bridge)
@@ -15,13 +26,15 @@ import time
 import rclpy
 from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
-from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
-from std_msgs.msg import String
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
+from sensor_msgs.msg import NavSatFix
+from std_msgs.msg import Float64, String
 from ultralytics import YOLO
 from vision_msgs.msg import Detection2D, Detection2DArray, ObjectHypothesisWithPose
 
 from esa.alerts import AlertManager
 from esa.geo import CameraGeo, pixel_to_latlon
+from esa.telemetry import TelemetryState
 
 
 class DetectorNode(Node):
@@ -39,6 +52,8 @@ class DetectorNode(Node):
         p("hfov_deg", 70.0)
         p("heading_deg", 0.0)
         p("pitch_deg", 90.0)  # camera tilt below the horizon; 90 = straight down
+        p("use_telemetry", False)
+        p("telemetry_timeout_s", 1.0)
         p("alert_labels", ["swimmer"])
         p("alert_min_frames", 5)
         g = lambda n: self.get_parameter(n).value  # noqa: E731
@@ -47,6 +62,22 @@ class DetectorNode(Node):
         self.source = int(g("source")) if str(g("source")).isdigit() else g("source")
         self.imgsz, self.conf, self.tracker = g("imgsz"), g("conf"), g("tracker")
         self.cam = CameraGeo(g("lat"), g("lon"), g("alt_m"), g("hfov_deg"), g("heading_deg"), g("pitch_deg"))
+        self.telemetry = None
+        if g("use_telemetry"):
+            self.telemetry = TelemetryState(
+                hfov_deg=g("hfov_deg"),
+                timeout_s=g("telemetry_timeout_s"),
+                defaults={"heading_deg": g("heading_deg"), "pitch_deg": g("pitch_deg")},
+            )
+            sub = self.create_subscription
+            # best-effort "sensor data" QoS: MAVROS publishes these best-effort, and a reliable subscriber
+            # would silently receive nothing from a best-effort publisher (this one receives from both)
+            qos = qos_profile_sensor_data
+            sub(NavSatFix, "fix", self._on_fix, qos)
+            sub(Float64, "rel_alt", lambda m: self._tel(alt_m=m.data), qos)
+            sub(Float64, "heading", lambda m: self._tel(heading_deg=m.data), qos)
+            sub(Float64, "gimbal_pitch", lambda m: self._tel(pitch_deg=m.data), qos)
+            self._last_warn = 0.0
         self.alerts = AlertManager(set(g("alert_labels")), g("alert_min_frames"))
         self.pub_det = self.create_publisher(Detection2DArray, "detections", 10)
         self.pub_geo = self.create_publisher(String, "tracks_geo", 10)
@@ -58,6 +89,27 @@ class DetectorNode(Node):
         )
         self.pub_alert = self.create_publisher(String, "alerts", alert_qos)
         self.get_logger().info(f"model={g('model')} source={self.source}")
+
+    def _now(self) -> float:
+        return self.get_clock().now().nanoseconds * 1e-9
+
+    def _tel(self, **values):
+        self.telemetry.update(self._now(), **values)
+
+    def _on_fix(self, m: NavSatFix):
+        if m.status.status >= 0:  # -1 = no fix
+            self._tel(lat=m.latitude, lon=m.longitude)
+
+    def current_camera(self) -> CameraGeo | None:
+        """Camera model for this frame: fixed parameters, or the latest fresh telemetry (None if stale)."""
+        if self.telemetry is None:
+            return self.cam
+        now = self._now()
+        cam = self.telemetry.camera(now)
+        if cam is None and now - self._last_warn > 5.0:
+            self._last_warn = now
+            self.get_logger().warn("no coordinates: " + ", ".join(self.telemetry.problems(now)))
+        return cam
 
     def run(self):
         t_prev = time.perf_counter()
@@ -85,6 +137,7 @@ class DetectorNode(Node):
             arr.header.stamp = stamp
             arr.header.frame_id = "camera"
             dets = []
+            cam = self.current_camera()
             for (x1, y1, x2, y2), c, s, tid in zip(
                 r.boxes.xyxy.tolist(), r.boxes.cls.int().tolist(), r.boxes.conf.tolist(), ids
             ):
@@ -99,7 +152,8 @@ class DetectorNode(Node):
                 hyp.hypothesis.score = float(s)
                 d.results.append(hyp)
                 arr.detections.append(d)
-                pos = pixel_to_latlon((x1 + x2) / 2, (y1 + y2) / 2, w, h, self.cam)  # None above the horizon
+                # None above the horizon, or when telemetry is missing or stale
+                pos = pixel_to_latlon((x1 + x2) / 2, (y1 + y2) / 2, w, h, cam) if cam else None
                 lat, lon = pos if pos else (None, None)
                 dets.append(
                     {
@@ -120,7 +174,17 @@ class DetectorNode(Node):
                             "frame": i,
                             "t": time.time(),
                             "fps": round(fps, 1),
-                            "drone": {"lat": self.cam.lat, "lon": self.cam.lon},
+                            "drone": (
+                                {
+                                    "lat": cam.lat,
+                                    "lon": cam.lon,
+                                    "alt_m": cam.alt_m,
+                                    "heading_deg": cam.heading_deg,
+                                    "pitch_deg": cam.pitch_deg,
+                                }
+                                if cam
+                                else None
+                            ),
                             "detections": dets,
                             "alerts": new_alerts,
                         }

@@ -19,7 +19,7 @@ jobs:
         with:
           required-ros-distributions: humble
       - name: ROS dependencies
-        run: sudo apt-get update && sudo apt-get install -y ros-humble-vision-msgs
+        run: sudo apt-get update && sudo apt-get install -y ros-humble-vision-msgs ros-humble-sensor-msgs
       - name: Python dependencies (CPU PyTorch; NumPy 1.x to match ROS Humble's compiled message code)
         run: |
           python3 -m pip install --upgrade pip
@@ -34,3 +34,5 @@ jobs:
         run: bash ros2_ws/test_node.sh
       - name: Run the node and check its topics (gimbal tilted 45 degrees, tilt-aware geolocation)
         run: PITCH=45.0 bash ros2_ws/test_node.sh
+      - name: Run the node and check its topics (live telemetry topics, as from MAVROS)
+        run: TELEMETRY=1 bash ros2_ws/test_node.sh
