@@ -37,6 +37,27 @@ the script and results file that produced it.
 | Does tracking hold on real sea footage? | IDF1 **0.50–0.79** on 4 real clips; GMC makes no difference at these slow camera speeds (as the simulation predicts) |
 | Does tilt-aware geolocation help on real flights? | Better on 3 of 4 real clips (best: swimmer drift **3.2 → 1.0 m/s**). Worse on the fourth, whose attitude log disagrees with the video |
 
+## Try it (no dataset download, about 5 minutes on a laptop CPU)
+
+The sea model, one second of real drone footage with its flight log, and a recorded run are in the repo.
+
+```bash
+git clone https://github.com/mustafarkhan/edge-situational-awareness && cd edge-situational-awareness
+pip install -r requirements-train.txt && pip install -e .
+
+# detect, track, geolocate and alert on real footage (SeaDronesSee clip never used for training)
+python tools/detect_video.py --model models/sds_y11n_ep4.pt --source samples/sea_DJI_0055/frames \
+  --imgsz 1280 --conf 0.1 --telemetry samples/sea_DJI_0055/telemetry.jsonl \
+  --alert swimmer --alert-min-frames 15 --out outputs/my_run.jsonl --save-video outputs/my_run.mp4
+
+# watch it on the map: replay your run, or the full recorded 5-second flight in web/sample/
+python web/backend/server.py --replay web/sample/sea_DJI_0055.jsonl --rate 15
+cd web/frontend && npm install && npm run dev     # open http://localhost:5173/?offline=1
+```
+
+Model details: [model card](docs/MODEL_CARD_sds_y11n_ep4.md). On a drone, the same pipeline runs as a ROS 2 node fed by
+MAVROS telemetry (see [System](#system)).
+
 ## 1. The data
 
 VisDrone2019-DET validation set: 548 images, 38,759 labelled objects
@@ -269,7 +290,8 @@ placed with the tilt-aware model.
 flowchart LR
     CAM[Camera / video + telemetry] --> DET[YOLO11<br/>PyTorch · ONNX INT8 · TensorRT]
     DET --> TRK[BoT-SORT + camera-motion comp.]
-    TRK --> GEO[pixel → lat/lon]
+    TEL[MAVROS telemetry<br/>GPS · height · heading · gimbal] --> GEO
+    TRK --> GEO[pixel → lat/lon<br/>tilt-aware, stale-data guard]
     GEO --> ALR[debounced alerts]
     ALR --> ROS[(ROS 2 topics)]
     ALR --> JSONL[JSONL log]
@@ -281,15 +303,19 @@ flowchart LR
 The ROS 2 node (`ros2_ws/`) is **tested end to end in CI** whenever the ROS or shared code changes: the [ROS 2 workflow](.github/workflows/ros2.yml)
 installs ROS 2 Humble on a GitHub runner, builds the package with colcon, runs the node on sample images and
 checks that `/detections` (standard `vision_msgs`), `/tracks_geo` and `/alerts` are published, that objects get real
-coordinates, and that the node exits cleanly. It runs twice: camera straight down, and gimbal tilted 45°
-(tilt-aware geolocation) ([`ros2_ws/test_node.sh`](ros2_ws/test_node.sh)). That test caught two real bugs: an abort at
+coordinates, and that the node exits cleanly ([`ros2_ws/test_node.sh`](ros2_ws/test_node.sh)). It runs three times:
+camera straight down; gimbal tilted 45° (tilt-aware geolocation); and with **live telemetry topics** published as MAVROS
+would (`fix`, `rel_alt`, `heading`, `gimbal_pitch`), where the fake drone is over Tampere and the test checks that the
+coordinates came from the topics. If any telemetry value is missing or older than 1 s, the node publishes detections
+**without** coordinates rather than positions computed from stale data (the lesson from §9).
+`ros2 launch esa_ros esa.launch.py use_telemetry:=true` wires the MAVROS topics in. That test caught two real bugs: an abort at
 shutdown, and alerts lost by subscribers that connect late. `/alerts` is now latched (transient local, last 10),
 so a ground station that joins or reconnects still receives recent alerts.
 
 ## Reproduce
 
 ```bash
-pip install -r requirements-train.txt && pip install -e . && pytest -q        # 13 tests, also run in CI
+pip install -r requirements-train.txt && pip install -e . && pytest -q        # 19 tests, also run in CI
 
 # data: VisDrone2019-DET train + val
 python data/convert_visdrone.py --src /path/to/visdrone --out datasets/visdrone_yolo
@@ -321,8 +347,10 @@ export/        ONNX + INT8 quantisation (CPU), TensorRT export (Jetson)
 benchmarks/    tracking scorer, geolocation sensitivity, Jetson benchmark, results CSVs
 tools/         sim_flight.py, detect_video.py (detect + track + geolocate), record_map.py
 scripts/       phase2_experiments.sh (land) and sea_experiments.sh (sea): every experiment, in order
-ros2_ws/       ROS 2 Humble package + end-to-end test (runs in CI)
-web/           FastAPI WebSocket bridge + React/MapLibre map
+ros2_ws/       ROS 2 Humble package (MAVROS telemetry input) + end-to-end test (runs in CI)
+models/        the SeaDronesSee model (AGPL-3.0)
+samples/       1 s of real sea footage with its flight log, for the quick start
+web/           FastAPI WebSocket bridge + React/MapLibre map; web/sample/ has a recorded real flight
 src/esa/       shared code: geolocation, alerts, tegrastats reader, COCO evaluation
 docs/          experiment log, limitations, model card, demo video
 tests/         unit tests

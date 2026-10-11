@@ -22,6 +22,36 @@ jobs:
         run: ruff format --check .
       - name: Unit tests
         run: pytest -q
+      - name: README numbers match the results files
+        run: python benchmarks/check_readme.py
+
+  quickstart:
+    name: README quick start on the sample clip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install (CPU PyTorch)
+        run: |
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install ultralytics lap && pip install -e .
+      - name: Detect, track, geolocate and alert on real sea footage
+        run: |
+          python tools/detect_video.py --model models/sds_y11n_ep4.pt --source samples/sea_DJI_0055/frames \
+            --imgsz 1280 --conf 0.1 --telemetry samples/sea_DJI_0055/telemetry.jsonl \
+            --alert swimmer --alert-min-frames 15 --out outputs/my_run.jsonl | tee run.log
+          python - <<'PY'
+          import json
+          recs = [json.loads(l) for l in open("outputs/my_run.jsonl")]
+          dets = [d for r in recs for d in r["detections"]]
+          located = [d for d in dets if d["lat"] is not None]
+          swimmers = {d["track_id"] for d in dets if d["label"] == "swimmer" and d["track_id"] is not None}
+          print(f"frames {len(recs)}, detections {len(dets)}, geolocated {len(located)}, swimmer tracks {len(swimmers)}")
+          assert len(recs) == 30 and len(located) > 100 and len(swimmers) >= 5
+          PY
+          grep -q "ALERT: swimmer" run.log
 
   frontend:
     name: Build the map app

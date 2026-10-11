@@ -10,7 +10,12 @@ Maritime module on SeaDronesSee (CC0 1.0), plus real-footage tracking and tilt-a
 - Tracking on 4 real sea clips: IDF1 0.50–0.79; GMC no help at slow camera speeds, as the simulation predicted
 - Tilt-aware geolocation (`pitch_deg`, ray / ground intersection) in `geo.py`, the CLI and the ROS 2 node; on real flight
   logs swimmer apparent drift **3.2 → 1.0 m/s**, worse on one clip with an inconsistent attitude log
-- Map app replays a real sea flight; demo video extended to 3 min with the sea results
+- Map app replays a real sea flight; demo video extended to 2.5 min with the sea results
+- ROS 2 node takes live telemetry (MAVROS `fix`, `rel_alt`, `heading`, plus `gimbal_pitch`) and publishes no
+  coordinates when telemetry is missing or stale; CI runs the node three times (nadir, 45° tilt, live telemetry)
+- Runs without any dataset: sea model (`models/`), 1 s of real footage with its flight log (`samples/`), a recorded
+  flight for the map (`web/sample/`), and a CI job that runs the README quick start on them
+- `benchmarks/check_readme.py` (in CI): 74 README numbers checked against the results files
 
 ## v1.0.0 — 2026-10-10
 
