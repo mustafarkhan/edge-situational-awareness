@@ -58,13 +58,13 @@ Walk the pipeline left to right, and at each stage say one decision and why.
 1. **Problem.** Search and rescue needs to find small objects over large areas, on a device that runs on battery. So accuracy on small objects and energy matter more than headline mAP.
 2. **Data.** Public datasets only. Explain the block split and why a random split would have leaked near-duplicate video frames. Show the object-size table.
 3. **Model.** YOLO11 baselines, one change per experiment. Show the comparison table: what resolution and SAHI bought in AP_small, and what they cost in time.
-4. **Optimisation.** TensorRT, precision levels, INT8 calibration from validation data. Show the Jetson table. Name the configuration you would deploy and why.
-5. **System.** Tracking (why ByteTrack), alert debouncing (why persistence), ROS 2 with standard messages, rosbag for replay, WebSocket to a React map.
+4. **Optimisation.** INT8 calibrated on *training* images (never evaluation images), and why full INT8 gave zero detections. TensorRT on the Jetson is the next measurement; say so rather than guess its numbers.
+5. **System.** Tracking (BoT-SORT with camera-motion compensation, and when it matters), alert debouncing (why persistence), ROS 2 with standard messages and MAVROS telemetry, refusing to geolocate on stale telemetry, WebSocket to a React map.
 6. **Limits.** Two or three failure examples with images. What you'd do next.
 
 ## Tailoring by role
 
-- **Robotics / deployment roles:** spend most time on Lab 3 and Lab 4: measuring on hardware, power modes, thermals, ROS 2 integration, rosbag replay, failure analysis.
+- **Robotics / deployment roles:** spend most time on Lab 3 and Lab 4: ROS 2 integration (MAVROS telemetry, latched alerts, the CI end-to-end test), the stale-telemetry guard, failure analysis, and the Jetson measurement plan.
 - **AI / ML roles:** spend most time on Labs 1–2: data analysis, leakage, evaluation rigour, small-object AP, the experiment log, INT8 accuracy loss.
 - **Frontend / full-stack roles:** the React map, the WebSocket bridge, dropping stale frames rather than queuing them, handling reconnects, and presenting uncertainty to an operator (the geolocation disclaimer on screen).
 - **Drone / UAV roles:** energy per frame, latency budgets, tilt-aware geolocation on real flight logs, and why attitude telemetry quality now limits it.
@@ -75,7 +75,7 @@ Prepare your own wording. These are the points your answer should hit.
 
 **"Why did you choose YOLO11 / Ultralytics?"** Mature, well-supported export to TensorRT, built-in tracking, fast to iterate. Trade-off: AGPL licence, so commercial use needs a different licence or model. Mention you know newer versions exist and the pipeline is model-agnostic.
 
-**"How do you know your results aren't overfitted?"** Separate validation and test; decisions on validation only; test touched once per final model; block split to stop video-frame leakage; tested on unseen footage in Lab 5.
+**"How do you know your results aren't overfitted?"** Separate validation and test; decisions on validation only; test touched once per final model; held-out VisDrone sequences; at sea a video-disjoint split, plus a measured leakage control showing the official split overstates swimmer AP by ~50%; real tracking on clips never used for training.
 
 **"Explain mAP."** Precision-recall curve per class, area under it, IoU thresholds, mean over classes. Then say why you also report AP_small.
 

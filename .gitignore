@@ -24,3 +24,7 @@ weights/
 !docs/video/demo_video.mp4
 configs/datasets/*.yaml
 /weights
+# small, freely licensed files a stranger needs to run the demo without any dataset
+!models/sds_y11n_ep4.pt
+!web/sample/*.jsonl
+!samples/*/telemetry.jsonl

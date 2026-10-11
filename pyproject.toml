@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "esa"
-version = "0.1.0"
+version = "1.1.0"
 description = "Edge AI for real-time situational awareness on NVIDIA Jetson (shared utilities)"
 license = { text = "AGPL-3.0" }
 requires-python = ">=3.10"

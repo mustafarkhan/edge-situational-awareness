@@ -20,7 +20,9 @@ What this project does not show yet, and where the model fails. Every failure be
   compensation matters) still comes only from the controlled simulation over one still, labelled frame; no real
   footage with fast camera motion and identity labels has been tested yet.
 - **ROS 2 tested in CI, not on the Jetson.** The node builds and runs end to end on ROS 2 Humble (GitHub runner,
-  CPU, sample images); it has not yet run on the Jetson with a camera.
+  CPU, sample images); it has not yet run on the Jetson with a camera. Live telemetry is tested with simulated
+  topics, not a real autopilot; gimbal yaw is assumed equal to the airframe heading, and there is no time
+  synchronisation between a frame and the telemetry beyond "latest value, at most 1 s old".
 - **Demo footage is held out, not foreign.** Sequences 9999951 and 9999955 were removed before training, but
   other VisDrone sequences may show the same city.
 - **Not a safety-certified system.** Research and portfolio work, not for operational rescue use.
