@@ -145,3 +145,56 @@ def test_independent_tilt_implementation_agrees():
             assert pixel_to_latlon(px, py, 960, 540, tilted) == pytest.approx(
                 tilted_ground_point(px, py, 960, 540, cam, tilt), abs=1e-9
             )
+
+
+# --- live telemetry (ROS 2 node) ---------------------------------------------------------------
+from esa.telemetry import TelemetryState  # noqa: E402
+
+
+def test_telemetry_needs_position_and_altitude():
+    t = TelemetryState(hfov_deg=70.0, defaults={"heading_deg": 0.0, "pitch_deg": 90.0})
+    assert t.camera(0.0) is None
+    t.update(0.0, lat=61.5, lon=23.76)
+    assert "alt_m missing" in t.problems(0.1)
+    t.update(0.1, alt_m=40.0)
+    cam = t.camera(0.2)
+    assert (cam.lat, cam.lon, cam.alt_m, cam.pitch_deg) == (61.5, 23.76, 40.0, 90.0)
+
+
+def test_stale_telemetry_gives_no_camera():
+    t = TelemetryState(hfov_deg=70.0, timeout_s=1.0, defaults={"heading_deg": 0.0, "pitch_deg": 90.0})
+    t.update(0.0, lat=61.5, lon=23.76, alt_m=40.0)
+    assert t.camera(0.9) is not None
+    assert t.camera(1.5) is None  # better no position than a stale one
+    assert any("stale" in p for p in t.problems(1.5))
+
+
+def test_gimbal_topic_overrides_default_and_then_must_stay_fresh():
+    t = TelemetryState(hfov_deg=70.0, timeout_s=1.0, defaults={"heading_deg": 0.0, "pitch_deg": 90.0})
+    t.update(0.0, lat=61.5, lon=23.76, alt_m=40.0, pitch_deg=45.0)
+    assert t.camera(0.5).pitch_deg == 45.0
+    t.update(2.0, lat=61.5, lon=23.76, alt_m=40.0)  # gimbal topic went silent
+    assert t.camera(2.1) is None
+
+
+def test_unknown_telemetry_field_is_rejected():
+    with pytest.raises(KeyError):
+        TelemetryState(hfov_deg=70.0).update(0.0, yaw=1.0)
+
+
+# --- real-footage geolocation helpers (benchmarks/geo_real.py) ---------------------------------
+sys.path.insert(0, str(ROOT / "benchmarks"))
+import geo_real  # noqa: E402
+
+
+def test_metres_between_points_one_arcsecond_apart():
+    assert geo_real.metres((60.0, 25.0), (60.0 + 1 / 3600, 25.0)) == pytest.approx(30.92, abs=0.01)
+
+
+def test_smoothing_turns_sample_and_hold_into_a_ramp_and_unwraps_heading():
+    tel = [{"lat": 0.0, "lon": 0.0, "alt_m": 10.0, "heading_deg": h, "pitch_deg": 90.0} for h in (358, 358, 2, 2)]
+    tel[2]["alt_m"] = tel[3]["alt_m"] = 13.0
+    out = geo_real.smooth_telemetry(tel)
+    assert [o["alt_m"] for o in out] == pytest.approx([10.0, 11.5, 13.0, 13.0])
+    # 358 -> 2 is a 4 deg turn through north, not a 356 deg turn the other way
+    assert out[1]["heading_deg"] == pytest.approx(0.0, abs=1e-9) or out[1]["heading_deg"] == pytest.approx(360.0)
