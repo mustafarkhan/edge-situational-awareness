@@ -537,6 +537,8 @@ python web/backend/server.py --replay outputs/track_slow_botsort.jsonl
 cd web/frontend && npm install && npm run dev          # open with ?offline=1 if there's no internet
 ```
 
+Proper GPU training (80-120 epochs instead of 3-5) on a free Kaggle GPU, one notebook: [docs/KAGGLE.md](docs/KAGGLE.md).
+
 The step-by-step course, with the reasoning behind each step: [docs/LAB_GUIDE.md](docs/LAB_GUIDE.md).
 Every run and decision, including two bugs and how they were found: [docs/EXPERIMENT_LOG.md](docs/EXPERIMENT_LOG.md).
 
