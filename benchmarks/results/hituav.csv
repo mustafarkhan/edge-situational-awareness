@@ -1,0 +1,2 @@
+tag,split,view,subset,n_images,n_objects,model,imgsz,sahi,cpu_ms_per_image_median,AP50,AP,AP_small,AP_medium,AP_large,AP_person,AP_car,AP_bicycle,AP_other_vehicle
+ft_y11n_640_test_native,test,native,all,477,3334,last.pt,640,False,88.1,0.6089,0.3334,0.366,0.4555,0.3497,0.3695,0.6017,0.3625,0.0

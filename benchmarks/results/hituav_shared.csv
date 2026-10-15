@@ -1,0 +1,17 @@
+tag,split,view,subset,n_images,n_objects,model,imgsz,sahi,cpu_ms_per_image_median,AP50,AP,AP_small,AP_medium,AP_large,AP_person,AP_car,AP_bicycle
+coco_y11n_640_test,test,shared,all,477,3318,yolo11n.pt,640,False,137.6,0.0536,0.023,0.0099,0.0249,0.1015,0.0191,0.0499,0.0
+coco_y11n_640_test_day,test,shared,day,124,825,yolo11n.pt,640,False,127.3,0.0507,0.0219,0.0038,0.0502,0.2625,0.0025,0.0633,0.0
+coco_y11n_640_test_night,test,shared,night,353,2493,yolo11n.pt,640,False,133.2,0.0555,0.024,0.0122,0.0231,0.0421,0.0251,0.0468,0.0
+coco_y11n_640_seen,seen,shared,all,336,2710,yolo11n.pt,640,False,139.2,0.0853,0.0397,0.0428,0.0314,0.0804,0.0391,0.0798,0.0003
+ft_y11n_640_test,test,shared,all,477,3318,last.pt,640,False,88.7,0.8119,0.4446,0.366,0.6074,0.6994,0.3695,0.6017,0.3625
+ft_y11n_640_test_day,test,shared,day,124,825,last.pt,640,False,82.3,0.6947,0.3381,0.301,0.5129,0.7541,0.2769,0.5513,0.186
+ft_y11n_640_test_night,test,shared,night,353,2493,last.pt,640,False,87.8,0.8311,0.4712,0.3335,0.6162,0.6697,0.4073,0.6216,0.3847
+ft_y11n_640_seen,seen,shared,all,336,2710,last.pt,640,False,89.6,0.813,0.465,0.371,0.4917,0.7774,0.4063,0.5931,0.3956
+ft_y11n_640_test_alt60,test,shared,alt_60,161,959,last.pt,640,False,84.2,0.8535,0.4938,0.2859,0.6355,0.7241,0.4309,0.684,0.3666
+ft_y11n_640_test_alt70,test,shared,alt_70,34,410,last.pt,640,False,85.0,0.7973,0.4627,0.2237,0.5993,0.6982,0.3431,0.6763,0.3687
+ft_y11n_640_test_alt80,test,shared,alt_80,37,261,last.pt,640,False,81.3,0.8371,0.4937,0.2171,0.6235,0.779,0.3889,0.7279,0.3642
+ft_y11n_640_test_alt90,test,shared,alt_90,20,141,last.pt,640,False,88.5,0.898,0.5712,0.4099,0.7325,-1.0,0.4055,0.7323,0.5757
+ft_y11n_640_test_alt100,test,shared,alt_100,42,415,last.pt,640,False,86.5,0.7529,0.3736,0.2888,0.6161,-1.0,0.231,0.5688,0.3208
+ft_y11n_640_test_alt110,test,shared,alt_110,36,431,last.pt,640,False,87.8,0.7879,0.4015,0.4132,0.4,-1.0,0.3671,0.5196,0.3177
+ft_y11n_640_test_alt120,test,shared,alt_120,48,262,last.pt,640,False,92.1,0.7721,0.4151,0.262,0.6083,-1.0,0.272,0.5581,
+ft_y11n_640_test_alt130,test,shared,alt_130,99,439,last.pt,640,False,86.4,0.8775,0.499,0.5039,0.5706,-1.0,0.4309,0.5672,

@@ -66,8 +66,11 @@ The rule that overrides everything here: **only say numbers you measured, and kn
     A rejected alert deletes the marker and mutes that spot in the detector.
 13. **Text prompts are not magic.** Open-vocabulary YOLOE needed a model 3× bigger and 10× the compute to beat a plain
     COCO model on swimmers, and a 4-epoch fine-tune still beat it by 1.6×. Useful for things you have no class for.
-14. **The same leak, a second time.** HIT-UAV's thermal split is random over frames 0.5 s apart; regrouping by flight
-    condition and holding whole flights out is the fix, and a "seen" set measures the inflation.
+14. **The same leak, a second time, and a different answer.** HIT-UAV's split is random over frames ~1 s apart. After
+    regrouping by flight condition, the measured inflation was tiny (+0.003 AP after the control), unlike at sea. Say
+    both possible explanations instead of claiming the problem away.
+15. **Thermal flips the night problem.** A colour-trained detector scores 0.023 on thermal frames; five CPU epochs give
+    0.445, and night beats day (0.471 vs 0.338), the opposite of the colour camera's night failure.
 
 ## The 5-minute walkthrough
 
