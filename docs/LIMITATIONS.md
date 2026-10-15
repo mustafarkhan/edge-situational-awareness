@@ -53,6 +53,24 @@ Measured effect of each error source in the controlled simulation (drone at 57â€
 
 The ray intersection is now implemented (`src/esa/geo.py`); terrain is not.
 
+## Search planning, alerts and TAK (v2)
+
+- **Search planning is a model built on measurements, not a field trial.** It assumes calm water, daylight, a camera
+  pointing straight down, a fixed visible swimmer size per scenario, and detection that is uniform across the frame.
+  Nothing has been flown with it yet.
+- **False alarms are not in the plan.** The model produces about 1 false swimmer box per image at the operating point.
+  At 100 m each frame covers more sea, so the false-alarm rate per kmÂ² is unknown. It needs measuring before
+  recommending an altitude for real use.
+- **Independent-look estimates come from 4 short clips** filmed from a slowly moving drone. Looks during a real sweep are
+  probably less correlated, so POD is likely underestimated (the conservative direction).
+- **No data below 4 px** at the model input. Altitudes that would make a swimmer smaller than that are shown as
+  "beyond measured data", not predicted.
+- **Alert de-duplication radius (3 m) was chosen on the same 4 clips it was measured on.** Swimmers closer together than
+  3 m share one alert.
+- **TAK:** UDP and plain TCP only; no TLS / client certificates (port 8089), no data packages, no CoT acknowledgement.
+  Tested against an open-source TAK server (taky) in CI, not against ATAK on a phone in the field.
+- **Operator decisions are not authenticated**; anyone who can reach the ground-station WebSocket can confirm or reject.
+
 ## Observed failures
 
 Green = found, red = missed, yellow = false positive. Fine-tuned YOLO11n, 1280 px, confidence 0.25.

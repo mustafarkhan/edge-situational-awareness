@@ -21,7 +21,9 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -58,7 +60,9 @@ def load_prompted(model_path: str, phrases: list[str]):
     return model
 
 
-def build_gt(data_yaml: str, split: str, keep: list[str] | None, limit: int) -> tuple[Path, dict, list[str]]:
+def build_gt(
+    data_yaml: str, split: str, keep: list[str] | None, limit: int, name_filter: str | None = None
+) -> tuple[Path, dict, list[str]]:
     cfg = yaml.safe_load(Path(data_yaml).read_text())
     root, names = Path(cfg["path"]), cfg["names"]
     names = [names[i] for i in sorted(names)] if isinstance(names, dict) else names
@@ -71,6 +75,8 @@ def build_gt(data_yaml: str, split: str, keep: list[str] | None, limit: int) -> 
     }
     aid = 1
     imgs = sorted((root / cfg[split]).glob("*.jpg"))
+    if name_filter:  # e.g. HIT-UAV encodes day/night and altitude in the file name
+        imgs = [p for p in imgs if re.search(name_filter, p.name)]
     if limit:
         imgs = imgs[:limit]
     for iid, p in enumerate(imgs, start=1):
@@ -94,8 +100,9 @@ def build_gt(data_yaml: str, split: str, keep: list[str] | None, limit: int) -> 
                 }
             )
             aid += 1
-    tag = "two" if keep else "native"
-    gt_path = root / f"coco_{split}_{tag}{'_' + str(limit) if limit else ''}.json"
+    tag = "_".join(keep) if keep else "native"
+    filt = "_" + hashlib.md5(name_filter.encode()).hexdigest()[:8] if name_filter else ""
+    gt_path = root / f"coco_{split}_{tag}{'_' + str(limit) if limit else ''}{filt}.json"
     gt_path.write_text(json.dumps(coco))
     return gt_path, coco, names
 
@@ -106,7 +113,11 @@ def main():
     ap.add_argument("--data", default=str(REPO / "configs/datasets/seadronessee.yaml"))
     ap.add_argument("--split", default="test")
     ap.add_argument("--imgsz", type=int, default=640)
-    ap.add_argument("--view", choices=["native", "two_class"], default="native")
+    ap.add_argument("--view", choices=["native", "two_class", "shared"], default="native")
+    ap.add_argument("--keep", default=None, help="view 'shared': classes to score, e.g. person,car,bicycle")
+    ap.add_argument("--coco-map", default=None, help="COCO id=class pairs for --coco-model, e.g. 0=person,2=car")
+    ap.add_argument("--name-filter", default=None, help="only images whose file name matches this regex")
+    ap.add_argument("--subset", default="", help="label for the --name-filter subset, recorded in the row")
     ap.add_argument("--coco-model", action="store_true", help="model predicts COCO classes (pretrained weights)")
     ap.add_argument("--prompts", default=None, help='open-vocabulary model: "class=phrase|phrase;class=phrase"')
     ap.add_argument("--device", default="cpu", help="cpu, or 0 for the GPU / a TensorRT engine on the Jetson")
@@ -118,11 +129,16 @@ def main():
     ap.add_argument("--tag", required=True)
     ap.add_argument("--out", default=str(REPO / "benchmarks/results/seadronessee.csv"))
     args = ap.parse_args()
-    if args.coco_model and args.view != "two_class":
-        sys.exit("a COCO-class model can only be scored with --view two_class")
+    if args.coco_model and args.view == "native":
+        sys.exit("a COCO-class model can only be scored on classes COCO has (--view two_class or shared)")
+    if args.view == "shared" and not args.keep:
+        sys.exit("--view shared needs --keep")
+    coco_map = COCO_TO_TWO
+    if args.coco_map:
+        coco_map = {int(k): v for k, v in (kv.split("=") for kv in args.coco_map.split(","))}
 
-    keep = ["swimmer", "boat"] if args.view == "two_class" else None
-    gt_path, gt, ds_names = build_gt(args.data, args.split, keep, args.limit)
+    keep = ["swimmer", "boat"] if args.view == "two_class" else args.keep.split(",") if args.view == "shared" else None
+    gt_path, gt, ds_names = build_gt(args.data, args.split, keep, args.limit, args.name_filter)
     root = gt["info"]["root"]
     phrases, targets = parse_prompts(args.prompts) if args.prompts else (None, None)
     if phrases:
@@ -147,7 +163,7 @@ def main():
     mapped = []
     for p in preds:
         c = p["category_id"] - 1  # model class index
-        name = targets[c] if phrases else COCO_TO_TWO.get(c) if args.coco_model else ds_names[c]
+        name = targets[c] if phrases else coco_map.get(c) if args.coco_model else ds_names[c]
         if name in out_names:
             mapped.append({**p, "category_id": out_names.index(name) + 1})
     m = coco_evaluate(gt_path, mapped, max_dets=args.max_dets) if mapped else {}
@@ -156,6 +172,7 @@ def main():
         "tag": args.tag,
         "split": args.split,
         "view": args.view,
+        **({"subset": args.subset or args.name_filter} if args.name_filter else {}),
         "n_images": len(gt["images"]),
         "n_objects": len(gt["annotations"]),
         "model": Path(args.model).name,
@@ -169,7 +186,9 @@ def main():
         row[k] = round(v, 4) if v == v else ""
     # per-class columns differ by view, so each view gets its own file
     out = Path(args.out)
-    stem = out.stem + ("_prompts" if phrases else "") + ("_two_class" if args.view == "two_class" else "")
+    stem = (
+        out.stem + ("_prompts" if phrases else "") + {"two_class": "_two_class", "shared": "_shared"}.get(args.view, "")
+    )
     out = out.with_name(stem + out.suffix)
     new = not out.exists()
     with out.open("a", newline="") as fh:

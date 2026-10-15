@@ -196,15 +196,18 @@ this flight). `?offline=1` draws a 20 m grid instead of map tiles, for field lap
 
 ## 8. On the Jetson (next)
 
-`WEIGHTS=weights/ft_y11n_ep3.pt bash benchmarks/run_on_jetson.sh` builds TensorRT FP16 and INT8 engines at 640 and
-1280 px and records AP_small (same metric as above), FPS, p50/p99 latency, watts, joules per frame and peak temperature.
+`bash benchmarks/run_on_jetson.sh` needs no dataset. It builds TensorRT FP16 and INT8 engines of the sea model at 640
+and 1280 px, with INT8 calibrated on 96 SeaDronesSee *training* images shipped in `samples/calib_sds`. For each engine
+it records frames per second, p50/p99 latency, watts, joules per frame and peak temperature on the real clip in
+`samples/`, plus the frame rate of the whole pipeline. Add `SDS=...` for accuracy on the test set, or `ROS=1` to run the
+ROS 2 node end to end. What to buy and how to set it up: [docs/JETSON.md](docs/JETSON.md).
 
 | model | input | precision | AP small | FPS | p99 ms | W | J/frame | max °C |
 |---|---|---|---|---|---|---|---|---|
-| YOLO11n fine-tuned | 640 | FP16 | | | | | | |
-| YOLO11n fine-tuned | 640 | INT8 | | | | | | |
-| YOLO11n fine-tuned | 1280 | FP16 | | | | | | |
-| YOLO11n fine-tuned | 1280 | INT8 | | | | | | |
+| YOLO11n sea | 640 | FP16 | | | | | | |
+| YOLO11n sea | 640 | INT8 | | | | | | |
+| YOLO11n sea | 1280 | FP16 | | | | | | |
+| YOLO11n sea | 1280 | INT8 | | | | | | |
 
 ## 9. At sea (SeaDronesSee)
 
@@ -284,6 +287,115 @@ attitude telemetry** matters as much as the geometry.
 The map app replaying real flight DJI_0055: drone path from its own GPS (yellow), swimmers (red) and boats (blue)
 placed with the tilt-aware model.
 
+## 10. Search planning: how high to fly (v2)
+
+A drone that flies higher covers more sea per minute, but each swimmer covers fewer pixels. This section measures that
+trade-off instead of guessing it, then turns it into a flight plan. Scripts: [`benchmarks/detection_vs_range.py`](benchmarks/detection_vs_range.py),
+[`benchmarks/search_planning.py`](benchmarks/search_planning.py); model: [`src/esa/search.py`](src/esa/search.py).
+
+**1. Does a swimmer get a box at all?** All 4,221 swimmers in the 1,200 unseen test images, sea model, 1280 px,
+confidence 0.25. For search, a box *on* the swimmer is what matters, so a hit is IoU ≥ 0.3 (AP uses 0.5–0.95).
+Source [`sea_detection_summary.json`](benchmarks/results/sea_detection_summary.json).
+
+| recall | precision | false alarms per image | swimmer size at the model input (2nd / 50th / 98th pct) |
+|---|---|---|---|
+| **84%** | 76% | 1.07 | 4.3 / 13.1 / 41.0 px |
+
+The model **finds most swimmers** (66–90% in every size bin from 4 to 50 px); its low AP (0.185) is mostly about how
+tightly the boxes fit tiny objects. For search, the binding limits are false alarms and how far the data goes.
+
+**2. Are consecutive frames independent looks?** No. On the four real clips, a swimmer seen for 1 s (30 frames) is
+detected in at least one frame 86% of the time; independent frames would give 100%. One second is worth **~1.6
+independent looks**, three seconds ~2.2 ([`search_looks.csv`](benchmarks/results/search_looks.csv)). Multiplying
+per-frame probabilities, as a naive planner would, badly overstates the probability of detection.
+
+**3. Does the size model hold?** A swimmer measures 1.08 m (median box, 639 straight-down DJI frames). Predicting its
+pixel size from altitude alone matches the measured size within 3 px at 40–130 m, and the predicted detection rate
+is within 0.10 below what was measured, i.e. conservative ([`search_validation.csv`](benchmarks/results/search_validation.csv)).
+
+**4. The plan.** 10 m/s, 65.5° lens, 80% probability of detection (POD), exponential detection law
+([`search_altitude.csv`](benchmarks/results/search_altitude.csv)):
+
+![Detection vs size and area searched per hour vs altitude](docs/figures/search_altitude.png)
+
+| altitude | swimmer (0.5 m head and shoulders) | P(detect) per pass | sea searched per hour at 80% POD |
+|---|---|---|---|
+| 20 m | 25 px | 0.96 | 0.55 km² |
+| 50 m | 10 px | 0.99 | 1.42 km² |
+| **100 m** | 5 px | 0.95 | **2.73 km²** |
+| 120 m | 4 px (below the measured range) | (0.93) | (3.20 km²) |
+
+- **Fly as high as the data supports:** 100 m covers about **5× more sea per hour** than 20 m, and detection per pass
+  stays at 0.95. The ceiling is where the measurements end, not a cliff in the model: 116 m if head and shoulders are
+  visible, 69 m if only a head is, 251 m for the median whole-swimmer box. EU open-category drones are limited to 120 m.
+- **Frame rate barely matters for coverage:** at 10 m/s, about **1 processed frame per second** already gives more
+  looks than are independent (`min_fps_needed` in the CSV). Faster inference buys tracking and alert latency, not
+  detection. On a Jetson this means a low frame rate and low power for search.
+- **Output a stranger can fly:** [`samples/search_example.plan`](samples/search_example.plan) is a QGroundControl
+  mission (PX4 / ArduPilot) for 0.5 km² of lake Pyhäjärvi: 100 m, 76 m track spacing, 7 tracks, 7.5 km, 12 min.
+
+Assumptions: calm water, daylight, camera straight down, swimmer size fixed per scenario, false alarms not yet in the
+plan. These are listed in [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
+
+## 11. Operator in the loop: review, de-duplication, TAK (v2)
+
+**Confirm / Reject.** Each alert in the map app has Confirm and Reject buttons. Every decision goes to an audit log
+and is shared live with every connected operator. A rejection is sent back to the detector (`/alert_reviews`), which
+then mutes new alerts within 10 m of that spot for 10 minutes (a buoy or a wave pattern that keeps firing).
+
+![The map app with one alert rejected and one confirmed](docs/figures/operator_review.png)
+
+**Fewer duplicate alerts.** The tracker sometimes loses a swimmer and gives it a new ID, and every new ID used to
+raise a new alert: 33 alerts for 17 swimmers on the four real clips. A new alert within *r* metres of a recent one
+is now treated as the same swimmer ([`benchmarks/alert_load.py`](benchmarks/alert_load.py),
+[`alert_load.csv`](benchmarks/results/alert_load.csv)):
+
+| de-duplication radius | alerts | swimmers alerted | duplicates | false |
+|---|---|---|---|---|
+| off | 33 | 17 | 14 | 2 |
+| 2 m | 21 | 17 | 3 | 1 |
+| **3 m (default)** | **18** | **17** | **0** | 1 |
+| 5 m | 14 | 14 (3 lost) | 0 | 0 |
+
+3 m removes **45% of alerts without losing a swimmer**; 5 m starts merging swimmers who are close together. The
+radius was chosen on these four clips, so treat it as a starting value.
+
+**TAK (ATAK / WinTAK / TAK Server).** [`src/esa/cot.py`](src/esa/cot.py) sends Cursor-on-Target messages. Each alert
+becomes a marker (type `a-u-S`, unknown object on the sea surface, 15 m position uncertainty, "unconfirmed" until an
+operator confirms it). The drone itself is sent at 1 Hz, and a rejected alert deletes its marker. Transport is UDP
+(ATAK mesh `239.2.3.1:6969`) or TCP to a TAK server:
+`python web/backend/server.py --replay web/sample/sea_DJI_0055.jsonl --tak udp://239.2.3.1:6969`.
+CI runs this end to end against a real open-source TAK server (taky): a TAK client receives the drone, the swimmer
+alert and the delete after an operator rejects it ([`tests/tak_e2e.py`](tests/tak_e2e.py)). TLS (port 8089) is not
+implemented.
+
+## 12. Text-prompt search: "find a person in the water" (v2)
+
+Open-vocabulary detectors find things described in words, with no training for those words. That would be ideal
+for search ("orange life raft", "overturned kayak"), so this section measures it on the same 1,200 sea test images.
+Model: YOLOE (Ultralytics, 2025), text prompts encoded by MobileCLIP, **no sea training at all**. The prompt wording
+was chosen on the val split (8 videos), and the chosen wording was scored once on test
+([`scripts/prompt_experiments.sh`](scripts/prompt_experiments.sh),
+[`seadronessee_prompts_two_class.csv`](benchmarks/results/seadronessee_prompts_two_class.csv)).
+
+| model (1280 px, test, swimmer + boat) | trained on sea? | AP | **AP swimmer** | AP boat | CPU ms |
+|---|---|---|---|---|---|
+| YOLO11n, COCO "person" / "boat" | no | 0.203 | 0.094 | 0.313 | 303 |
+| YOLOE-11s, text prompts | no | 0.180 | 0.055 | 0.304 | 926 |
+| YOLOE-11m, text prompts | no | 0.241 | 0.118 | 0.363 | 2,681 |
+| **YOLO11n fine-tuned (§9)** | yes, 4 CPU epochs | **0.344** | **0.185** | **0.503** | 276 |
+
+- **Wording matters a little.** On val, the best phrasing ("swimmer | person in water | person swimming | head above
+  water") scored 0.095 swimmer AP and the worst ("swimmer") 0.078.
+- **For swimmers, a short fine-tune beats text prompts clearly:** 1.6× the swimmer AP of the medium text model, at a
+  tenth of the compute. The small text model is worse than a plain COCO model.
+- **It does not fill the gaps.** Asked for all five sea classes by name, YOLOE-11s scores jetski 0.025, buoy 0.021 and
+  life-saving appliances 0.001. The fine-tuned model scores 0.143, 0.501 and 0.000.
+- **Use it as a search tool, not the detector:** [`tools/search_by_text.py`](tools/search_by_text.py) runs any
+  description over footage and writes the same JSONL as the main pipeline, with positions, so the results go to the
+  map and to TAK. It is useful for objects the trained model has no class for, provided they are bigger than a
+  swimmer's head.
+
 ## System
 
 ```mermaid
@@ -330,6 +442,14 @@ WEIGHTS=weights/ft_y11n_ep3.pt RAW_ANN=/path/to/VisDrone2019-DET-val/annotations
 # section 9 (sea): data download notes and every command, in order
 bash scripts/sea_experiments.sh
 
+# v2: sections 10-13
+python benchmarks/detection_vs_range.py --ann-train ... --ann-val ...   # detection vs size, sea test set
+python benchmarks/search_planning.py --clips outputs/sea_mot/DJI_00*   # looks, validation, plan, QGC mission
+python benchmarks/alert_load.py --clips outputs/sea_mot/DJI_00* --runs outputs
+bash scripts/prompt_experiments.sh                                      # text prompts (YOLOE)
+HIT=/path/to/HIT-UAV bash scripts/thermal_experiments.sh               # thermal
+python tests/tak_e2e.py --taky /path/to/taky                            # TAK end to end
+
 # map app (laptop, no ROS)
 python web/backend/server.py --replay outputs/track_slow_botsort.jsonl
 cd web/frontend && npm install && npm run dev          # open with ?offline=1 if there's no internet
@@ -345,13 +465,13 @@ training/      train.py (config-driven), evaluate_zeroshot.py (AP_small), evalua
 configs/       one YAML per experiment; tracker variants
 export/        ONNX + INT8 quantisation (CPU), TensorRT export (Jetson)
 benchmarks/    tracking scorer, geolocation sensitivity, Jetson benchmark, results CSVs
-tools/         sim_flight.py, detect_video.py (detect + track + geolocate), record_map.py
-scripts/       phase2_experiments.sh (land) and sea_experiments.sh (sea): every experiment, in order
+tools/         sim_flight.py, detect_video.py (detect + track + geolocate), search_by_text.py, record_map.py
+scripts/       land, sea, prompt and thermal experiment scripts: every experiment, in order
 ros2_ws/       ROS 2 Humble package (MAVROS telemetry input) + end-to-end test (runs in CI)
 models/        the SeaDronesSee model (AGPL-3.0)
-samples/       1 s of real sea footage with its flight log, for the quick start
+samples/       1 s of real sea footage with its flight log, INT8 calibration images, an example search mission
 web/           FastAPI WebSocket bridge + React/MapLibre map; web/sample/ has a recorded real flight
-src/esa/       shared code: geolocation, alerts, tegrastats reader, COCO evaluation
+src/esa/       shared code: geolocation, telemetry, alerts, search planning, TAK (CoT), tegrastats, COCO evaluation
 docs/          experiment log, limitations, model card, demo video
 tests/         unit tests
 ```
@@ -361,6 +481,7 @@ tests/         unit tests
 | dataset | used for | terms | citation |
 |---|---|---|---|
 | VisDrone2019-DET | people, vehicles | Research benchmark; the project's GitHub page states no formal licence (checked 2026-10-09). Treated as research-only; no images or weights derived from it are redistributed here. | Zhu et al., "Detection and Tracking Meet Drones Challenge", IEEE TPAMI 44(11), 2021 |
+| HIT-UAV (thermal) | people, cars, bicycles at 60–130 m, day and night | CC0 1.0 (Zenodo 10.5281/zenodo.7633134) | Suo et al., "HIT-UAV: A high-altitude infrared thermal dataset for Unmanned Aerial Vehicle-based object detection", Scientific Data 10, 227 (2023) |
 | SeaDronesSee ODv2 + MOT | swimmers, boats, jetskis, life-saving appliances, buoys at sea | CC0 1.0 (public domain dedication) | Varga et al., "SeaDronesSee: A Maritime Benchmark for Detecting Humans in Open Water", WACV 2022 |
 
 The figures and demo video show VisDrone and SeaDronesSee imagery for illustration.

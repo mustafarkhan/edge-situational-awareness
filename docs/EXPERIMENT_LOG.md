@@ -219,6 +219,50 @@ Small-object AP is the metric that matters; overall mAP hides the problem.
 - **Conclusion:** consistent with the simulation's slow regime (GMC matters only when the camera moves fast).
   DJI_0055 (15 bunched swimmers, 20 m) has 40–46 ID switches; that is a detection/crowding problem, not motion.
 
+### 2026-10-15 — v2: search planning from measured detection rates
+- **Question:** how high and how fast should the drone fly so a swimmer is likely to be found?
+- **Measured** (`benchmarks/detection_vs_range.py`, sea model, 1280 px, conf 0.25): 4,221 swimmers in the 1,200 unseen
+  test images. With "a box overlapping the swimmer" (IoU >= 0.3) as the criterion, recall is **84%**, precision 76%,
+  1.07 false alarms per image, and it stays **66-90% across the whole measured size range (4-50 px)**. The low AP
+  (0.185, IoU 0.5:0.95) is mostly box tightness on tiny objects, not missed swimmers.
+- **Bug caught:** first pass selected "near-nadir" frames with pitch <= -70 and found none: in SeaDronesSee ODv2
+  metadata gimbal pitch is degrees *below* the horizon (90 = straight down; the Trinity frames are all 90). Fixed to
+  >= 70. Swimmer size from 639 near-nadir boxes: median 1.08 m (sqrt of box area; 65.5 deg lens assumed).
+- **Consecutive frames are not independent:** on the 4 real MOT clips, P(detected in >= 1 frame) for 1 s of video
+  (30 frames) is 0.86, vs 1.00 if frames were independent: 1 s is worth ~1.6 independent looks, 3 s ~2.2.
+- **Validation:** the pixels-on-target model predicts the swimmer size at each altitude within 3 px and detection
+  within 0.10 (conservative) for 40-130 m.
+- **First curve fit was optimistic:** a running maximum lifted dips to the best bin; replaced by isotonic regression
+  (pool adjacent violators, weighted by swimmers per bin).
+- **Result:** within the measured data, area searched per hour grows ~linearly with altitude (0.55 km^2/h at 20 m to
+  2.7 km^2/h at 100 m, 80% POD, 10 m/s). The ceiling is where the data ends: 116 m if head and shoulders (0.5 m) are
+  visible, 69 m for head only. **Frame rate does not limit coverage**: at 10 m/s about 1 frame/s already exceeds the
+  independent looks per pass. Extra speed buys tracking and alert latency, not detection.
+- **Output:** QGroundControl mission for a 0.5 km^2 example (100 m, 76 m track spacing, 7.5 km, 12 min).
+
+### 2026-10-15 — v2: operator loop, alert de-duplication, TAK
+- **Symptom:** the map app showed ~20 alerts in 5 s for 15 swimmers. Tracker ID changes re-trigger the 15-frame alert.
+- **Measured** (`benchmarks/alert_load.py`, real tracking runs on the 4 clips): 33 alerts for 17 swimmers alerted
+  (14 duplicates, 2 false). Spatial de-duplication: 2 m -> 21 alerts; **3 m -> 18 alerts, all 17 swimmers still
+  alerted**; 5 m merges neighbouring swimmers and loses 3. Default set to 3 m. Caveat: chosen on the same 4 clips.
+- Operator Confirm/Reject in the map app -> audit log, TAK update/delete, and /alert_reviews to the detector, which
+  suppresses new alerts within 10 m of a rejected one for 10 min.
+- **TAK:** Cursor-on-Target alerts (type a-u-S, 15 m circular error) and drone position (a-f-A-M-H-Q, 1 Hz) over UDP or
+  TCP. CI starts a real TAK server (taky), connects a TAK client, replays the recorded flight, rejects an alert over
+  the WebSocket and checks the client received the drone, the alert and the delete.
+- **ROS 2 CI flake:** the second of three end-to-end runs crashed inside `ros2 topic echo` while auto-detecting QoS from
+  a publisher cached from the previous run. Fix: fresh ROS daemon per run, explicit QoS on echo.
+
+### 2026-10-15 — v2: thermal data (HIT-UAV) and another leaky split
+- HIT-UAV (Zenodo 10.5281/zenodo.7633134, CC0): images only in an 815 MB zip on Zenodo, unreachable from the build
+  machine. Read the zip's central directory with HTTP range requests in a browser on a second computer and fetched
+  only the two byte ranges holding the images and annotations (201 MB); every file checked against its recorded size.
+- **Leak:** the official split is random over frames sampled every 15 frames from videos; 54% of test images have a
+  training image within 2 serial numbers. File names encode day/night, altitude and camera angle, so images are
+  grouped by (day/night, altitude, angle) — 105 groups, a proxy for one flight — and whole groups are held out
+  (`data/convert_hituav.py`): train 1,902, val 183, test 477, plus "seen" 336 held-out frames from training groups.
+- Thermal objects are larger than at sea: median 27 px at 640 px input (sea: 7 px).
+
 ---
 
 ## Template

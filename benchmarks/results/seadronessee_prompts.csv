@@ -1,0 +1,2 @@
+tag,split,view,n_images,n_objects,model,imgsz,sahi,prompts,cpu_ms_per_image_median,AP50,AP,AP_small,AP_medium,AP_large,AP_swimmer,AP_boat,AP_jetski,AP_life_saving_appliances,AP_buoy
+yoloe11s_native_test,test,native,1200,6825,yoloe-11s-seg.pt,1280,False,swimmer=swimmer|person in water;boat=boat;jetski=jet ski;life_saving_appliances=life buoy|life ring|life raft;buoy=buoy,924.3,0.125,0.0569,0.0441,0.1151,0.1904,0.0346,0.2031,0.0254,0.0005,0.021
