@@ -1,0 +1,16 @@
+# Thermal module: fine-tune COCO-pretrained YOLO11n on HIT-UAV (flight-disjoint split, data/convert_hituav.py), CPU.
+# Same recipe and lessons as the sea run (warmup_epochs 1, close_mosaic 1). Images are 640x512 already.
+model: weights/yolo11n.pt
+data: configs/datasets/hituav.yaml
+imgsz: 640
+epochs: 5
+warmup_epochs: 1
+close_mosaic: 1
+batch: 8
+workers: 2
+device: cpu
+val: false
+plots: false
+project: runs/hit
+name: y11n_640_cpu
+exist_ok: true

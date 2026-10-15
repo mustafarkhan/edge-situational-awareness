@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.0.0 — 2026-10-15 — search planning, operator loop, TAK, text prompts, thermal
+
+- **Search planning** from measured data: detection vs pixels on 4,221 unseen swimmers (84% get a box at IoU 0.3),
+  measured look correlation on real clips, altitude-validated size model, sweep rate per altitude, QGroundControl
+  mission export. 100 m searches ~5× more sea per hour than 20 m; ~1 frame/s is enough for coverage at 10 m/s
+- **Operator loop:** Confirm/Reject in the map app, audit log, rejection memory in the detector; spatial alert
+  de-duplication (3 m: 45% fewer alerts, no swimmer lost on real clips)
+- **TAK / Cursor on Target:** alerts and drone position to ATAK/WinTAK/TAK Server (UDP/TCP); end-to-end CI test against
+  a real TAK server
+- **Text-prompt search** (YOLOE): measured on sea data (fine-tuned model still 1.6× better on swimmers);
+  `tools/search_by_text.py`
+- **Night / thermal** on HIT-UAV with a flight-disjoint split (official split leaks frames 0.5 s apart)
+- **Jetson:** dataset-free one-command run with shipped INT8 calibration images; `docs/JETSON.md`
+- ROS 2 CI hardened (fresh daemon, explicit QoS); README checker now covers 110+ numbers
+
 ## v1.1.0 — 2026-10-11 — at sea
 
 Maritime module on SeaDronesSee (CC0 1.0), plus real-footage tracking and tilt-aware geolocation.

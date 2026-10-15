@@ -106,6 +106,38 @@ CLAIMS: list[tuple[str, list[str]]] = [
         )
         for clip in ("DJI_0055", "DJI_0057", "DJI_0001_d3", "DJI_0059")
     ],
+    # v2: search planning (head-and-shoulders case, 4 frames/s)
+    *[
+        (
+            f"| **{alt} m** |" if alt == 100 else f"| {alt} m | ",
+            [
+                v("search_altitude.csv", {"size_m": 0.5, "fps": 4.0, "alt_m": alt}, "p_per_pass", "{:.2f}"),
+                v("search_altitude.csv", {"size_m": 0.5, "fps": 4.0, "alt_m": alt}, "km2_h_at_pod80", "{:.2f}"),
+            ],
+        )
+        for alt in (20, 50, 100, 120)
+    ],
+    # v2: alert de-duplication (all clips)
+    *[
+        (
+            label,
+            [
+                v("alert_load.csv", {"clip": "all", "dedupe_radius_m": r}, c, "{:.0f}")
+                for c in ("alerts", "unique_swimmers_alerted", "duplicate_alerts", "false_alerts")
+            ],
+        )
+        for label, r in (("| off | ", 0), ("| 2 m | ", 2), ("| **3 m (default)** |", 3), ("| 5 m | ", 5))
+    ],
+    # v2: text prompts (test, swimmer + boat)
+    *[
+        (anchor, [v(csv_, {"tag": tag}, c) for c in ("AP", "AP_swimmer", "AP_boat")])
+        for anchor, csv_, tag in (
+            ('| YOLO11n, COCO "person" / "boat" |', SEA2, "coco_y11n_1280"),
+            ("| YOLOE-11s, text prompts |", "seadronessee_prompts_two_class.csv", "yoloe11s_p3_synonyms_test"),
+            ("| YOLOE-11m, text prompts |", "seadronessee_prompts_two_class.csv", "yoloe11m_p3_synonyms_test"),
+            ("| **YOLO11n fine-tuned (§9)** |", SEA2, "ft_y11n_1280"),
+        )
+    ],
 ]
 
 

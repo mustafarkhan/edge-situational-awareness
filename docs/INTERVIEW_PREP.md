@@ -51,6 +51,24 @@ The rule that overrides everything here: **only say numbers you measured, and kn
    video rotates −30° while the log implies about +8°: the attitude log was wrong during a fast manoeuvre. Smoothing
    and clock-offset search didn't help, and I reported it rather than tuning it away.
 
+### v2 stories (search planning, operator loop, TAK)
+
+9. **"Fly higher" is a measured answer.** The sea model puts a box on 84% of swimmers (IoU ≥ 0.3) even at 4–6 px, so
+   its low AP was box tightness, not missed swimmers. Turning the detection-vs-size curve into sweep width says
+   100 m covers ~5× more sea per hour than 20 m. Two traps avoided: consecutive frames are not independent (1 s of
+   video ≈ 1.6 independent looks, measured), and a running-max curve fit was optimistic (replaced by isotonic regression).
+10. **You don't need 30 fps to search.** At 10 m/s about 1 processed frame per second already saturates the
+    independent looks per pass. The Jetson question becomes energy at the needed frame rate, not peak FPS.
+11. **Operator overload is a measurable bug.** 33 alerts for 17 swimmers, because tracker ID changes re-fired alerts.
+    3 m spatial de-duplication: 18 alerts, no swimmer lost; 5 m loses swimmers. Say how you chose the radius and
+    that it was tuned on the same clips.
+12. **Speak the customer's protocol.** Alerts go to ATAK as Cursor-on-Target; CI proves it against a real TAK server.
+    A rejected alert deletes the marker and mutes that spot in the detector.
+13. **Text prompts are not magic.** Open-vocabulary YOLOE needed a model 3× bigger and 10× the compute to beat a plain
+    COCO model on swimmers, and a 4-epoch fine-tune still beat it by 1.6×. Useful for things you have no class for.
+14. **The same leak, a second time.** HIT-UAV's thermal split is random over frames 0.5 s apart; regrouping by flight
+    condition and holding whole flights out is the fix, and a "seen" set measures the inflation.
+
 ## The 5-minute walkthrough
 
 Walk the pipeline left to right, and at each stage say one decision and why.
@@ -83,7 +101,15 @@ Prepare your own wording. These are the points your answer should hit.
 
 **"Your FPS is X. Is that real time?"** Depends on the requirement: compare with camera frame rate and the speed at which the scene changes. Mention p99 latency, and that pre- and post-processing are part of the budget.
 
-**"What would you do with another month?"** Pick from: frame-rate, timestamped gimbal attitude over MAVLink (real geolocation is now limited by telemetry, not geometry); a longer sea fine-tune so life-saving appliances are learned; thermal camera and a thermal model for night; a larger and harder test set; multi-camera DeepStream pipeline; hard-negative mining for wave-crest false alarms; INT8 quantisation-aware training if calibration loses too much.
+**"How would you decide how high to fly?"** Measured detection vs pixels on target, a size model validated
+against altitude metadata, measured look correlation, exponential detection law for POD, then sweep rate per altitude.
+Name the assumptions (calm water, nadir camera, false alarms not yet in the plan).
+
+**"How do you integrate with responders?"** TAK/CoT markers with position uncertainty, operator confirm/reject,
+audit log, rejection feedback to the detector. Mention what is missing (TLS, authentication).
+
+**"What would you do with another month?"** Pick from: false-alarm rate per km² vs altitude (the missing input to the
+search plan); frame-rate, timestamped gimbal attitude over MAVLink (real geolocation is now limited by telemetry, not geometry); a longer sea fine-tune so life-saving appliances are learned; thermal camera and a thermal model for night; a larger and harder test set; multi-camera DeepStream pipeline; hard-negative mining for wave-crest false alarms; INT8 quantisation-aware training if calibration loses too much.
 
 **"What was the hardest bug?"** Have a real story from your log, with the symptom, how you found it and how you verified the fix. Write it down as soon as it happens; you won't remember the details later.
 
