@@ -34,4 +34,11 @@ done
 echo "== 3. all five sea classes by text (classes COCO has no word for), test"
 NATIVE="swimmer=swimmer|person in water;boat=boat;jetski=jet ski;life_saving_appliances=life buoy|life ring|life raft;buoy=buoy"
 $E --model $W/yoloe-11s-seg.pt --view native --split test --prompts "$NATIVE" --tag yoloe11s_native_test
+echo "== 4. land (VisDrone val, 548 images): pedestrian + car; one fixed wording, not tuned"
+L="python training/evaluate_sea.py --data configs/datasets/visdrone.yaml --split val --imgsz 1280 --view shared"
+L="$L --keep pedestrian,car --out benchmarks/results/visdrone_prompts.csv --name-filter . --subset all"
+LAND="pedestrian=person|pedestrian|person walking;car=car"
+$L --model $W/yolo11n.pt --coco-model --coco-map 0=pedestrian,2=car --tag coco_y11n_1280
+$L --model $W/ft_y11n_ep3.pt --tag ft_y11n_1280
+for m in 11s 11m; do $L --model $W/yoloe-$m-seg.pt --prompts "$LAND" --tag yoloe${m}_land; done
 echo PROMPTS_DONE

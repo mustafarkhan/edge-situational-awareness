@@ -18,7 +18,7 @@ import tempfile
 from pathlib import Path
 
 import pandas as pd
-from PIL import Image
+from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from make_linkedin import (  # noqa: E402
@@ -44,19 +44,25 @@ from make_linkedin import (  # noqa: E402
 GREEN = (46, 160, 67)
 
 
-def chart_card(rows: list[tuple[str, float, str]], title: str, sub: str, note: str):
-    """Big horizontal bars, drawn directly (no matplotlib) so it matches the other cards."""
+def chart_card(rows: list[tuple], title: str, sub: str, note: str):
+    """Big horizontal bars, drawn directly (no matplotlib) so it matches the other cards.
+    rows: (label, value, annotation, highlighted) or a plain string for a group header."""
     im, d = blank()
-    y = text_block(d, (60, 120), title, font(52, "Bold"), width_chars=30)
-    text_block(d, (60, y + 10), sub, font(32), fill=MUTED, width_chars=50)
-    vmax = max(v for _, v, _ in rows)
-    top = 520
-    for i, (label, v, ann) in enumerate(rows):
-        yy = top + i * 170
-        d.text((60, yy), label, font=font(40, "Bold"), fill=FG)
-        bw = int((W - 300) * v / vmax)
-        d.rectangle([60, yy + 58, 60 + bw, yy + 118], fill=ACCENT if i == len(rows) - 1 else (120, 130, 140))
-        d.text((80 + bw, yy + 62), ann, font=font(38, "Bold"), fill=FG)
+    y = text_block(d, (60, 110), title, font(52, "Bold"), width_chars=30)
+    y = text_block(d, (60, y + 10), sub, font(30), fill=MUTED, width_chars=54)
+    vmax = max(r[1] for r in rows if not isinstance(r, str))
+    yy = max(y + 40, 400)
+    for r in rows:
+        if isinstance(r, str):
+            d.text((60, yy), r, font=font(34, "Bold"), fill=ACCENT)
+            yy += 60
+            continue
+        label, v, ann, hi = r
+        d.text((60, yy), label, font=font(34), fill=FG)
+        bw = max(int((W - 340) * v / vmax), 4)
+        d.rectangle([60, yy + 46, 60 + bw, yy + 96], fill=ACCENT if hi else (120, 130, 140))
+        d.text((80 + bw, yy + 50), ann, font=font(34, "Bold"), fill=FG)
+        yy += 125
     text_block(d, (60, H - 230), note, font(27), fill=MUTED, width_chars=62)
     brand(d)
     return im
@@ -173,7 +179,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sea-mot", required=True)
     ap.add_argument("--runs", required=True)
-    ap.add_argument("--review-clip", required=True)
+    ap.add_argument("--review-clip", required=True, help="sea operator session (tools/screenshot_review.py --video)")
+    ap.add_argument("--review-clip-land", required=True, help="land operator session")
+    ap.add_argument("--land-flight", required=True, help="simulated flight folder over a real VisDrone frame")
+    ap.add_argument("--land-run", required=True, help="tracking JSONL for that flight")
     ap.add_argument("--thermal-dir", required=True)
     ap.add_argument("--thermal-image", default="1_80_50_0_01218.jpg")
     ap.add_argument("--out", default=str(REPO / "outputs/linkedin_v2.mp4"))
@@ -190,6 +199,12 @@ def main():
     th = pd.read_csv(R / "hituav_shared.csv").set_index("tag")
     pr = pd.read_csv(R / "seadronessee_prompts_two_class.csv").set_index("tag")
     two = pd.read_csv(R / "seadronessee_two_class.csv").set_index("tag")
+    lsa = pd.read_csv(R / "land_search_altitude.csv").set_index(["hfov_deg", "alt_m"])
+    lsum = json.loads((R / "land_detection_summary.json").read_text())
+    vp = pd.concat(
+        [pd.read_csv(R / "visdrone_prompts_shared.csv"), pd.read_csv(R / "visdrone_prompts_prompts_shared.csv")]
+    )
+    vp = vp.drop_duplicates("tag", keep="last").set_index("tag")
 
     ff = subprocess.Popen(
         ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(FPS)]
@@ -212,39 +227,64 @@ def main():
                 frames[rec["frame"]],
                 rec,
                 crop,
-                "Version 2: from spotting swimmers to finding them",
+                "Version 2: finding people at sea…",
                 "Search planning · operator review · alerts on TAK maps · night-time thermal",
                 None,
                 ids=False,
             ).tobytes()
         )
+    lrecs = [json.loads(x) for x in Path(a.land_run).read_text().splitlines()]
+    lframes = sorted((Path(a.land_flight) / "frames").iterdir())
+    w0, h0 = Image.open(lframes[0]).size
+    for rec in lrecs[:90]:
+        im = footage_frame(
+            lframes[rec["frame"]],
+            rec,
+            (0, 0, w0, h0),
+            "…and on land",
+            "Same pipeline over cities: people and vehicles, tracked and placed on the map.",
+            None,
+            ids=False,
+        )
+        d = ImageDraw.Draw(im)
+        d.rectangle([W - 380, 290, W, 330], fill=BG)  # replace the "real drone footage" tag: this one is simulated
+        d.text((W - 370, 296), "simulated flight, real image", font=font(24), fill=(255, 255, 255))
+        ff.stdin.write(im.tobytes())
+
     # 2. how high to fly
+    def km(v):
+        return f"{v:.2f} km²/h"
+
     rows = [
-        (f"{alt} m", float(sa.loc[alt, "km2_h_at_pod80"]), f"{sa.loc[alt, 'km2_h_at_pod80']:.2f} km²/h")
-        for alt in (20, 50, 100)
+        "At sea, by day (colour camera, swimmer)",
+        ("20 m", float(sa.loc[20, "km2_h_at_pod80"]), km(sa.loc[20, "km2_h_at_pod80"]), False),
+        ("100 m", float(sa.loc[100, "km2_h_at_pod80"]), km(sa.loc[100, "km2_h_at_pod80"]), True),
+        "On land, at night (thermal camera, person)",
+        ("40 m", float(lsa.loc[(25.0, 40), "km2_h_at_pod80"]), km(lsa.loc[(25.0, 40), "km2_h_at_pod80"]), False),
+        ("120 m", float(lsa.loc[(25.0, 120), "km2_h_at_pod80"]), km(lsa.loc[(25.0, 120), "km2_h_at_pod80"]), True),
     ]
     hold(
         chart_card(
             rows,
             "How high should a search drone fly?",
-            f"Sea searched per hour at 80% probability of detection. Detection per pass stays ≥ "
-            f"{min(sa.loc[[20, 50, 100], 'p_per_pass']):.2f}.",
-            f"Measured on {summ['swimmers']:,} swimmers in unseen test videos: {summ['recall']:.0%} get a box, even at "
-            f"4–6 px. Consecutive frames are not independent: 1 s of video ≈ "
-            f"{looks.loc[30, 'independent_looks_equivalent']:.1f} looks. At 10 m/s, ~1 frame/s is enough.",
+            "Area searched per hour at 80% probability of detection, 10 m/s. Measured, not assumed.",
+            f"Sea: {summ['recall']:.0%} of {summ['swimmers']:,} unseen swimmers get a box, even at 4–6 px; 1 s of video ≈ "
+            f"{looks.loc[30, 'independent_looks_equivalent']:.1f} independent looks. Land at night: "
+            f"{lsum['recall']:.0%} of {lsum['persons']:,} people; lens choice matters as much as altitude.",
         ),
-        7.5,
+        8.5,
     )
     # 3. the plan
     for im in route_frames(plan, ex, int(5.5 * FPS)):
         ff.stdin.write(im.tobytes())
     # 4. operator review (real map app, recorded)
-    tmp = Path(tempfile.mkdtemp())
-    subprocess.run(
-        ["ffmpeg", "-loglevel", "error", "-ss", "1", "-i", a.review_clip, "-vf", f"fps={FPS}", str(tmp / "%04d.png")],
-        check=True,
-    )
-    for p in sorted(tmp.iterdir()):
+    clips = []
+    for clip, start, dur, kind in ((a.review_clip_land, 5.5, 5.0, "land"), (a.review_clip, 3.5, 6.0, "sea")):
+        tmp = Path(tempfile.mkdtemp())
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-ss", str(start), "-t", str(dur), "-i", clip, "-vf",
+                        f"fps={FPS}", str(tmp / "%04d.png")], check=True)  # fmt: skip
+        clips += [(p, kind) for p in sorted(tmp.iterdir())]
+    for p, kind in clips:
         im, d = blank()
         m = Image.open(p).convert("RGB")
         m = m.crop((int(m.width * 0.42), int(m.height * 0.12), m.width, m.height))  # swimmers + alert panel
@@ -252,17 +292,18 @@ def main():
         m = m.resize((int(m.width * sc), int(m.height * sc)), Image.LANCZOS)
         im.paste(m, ((W - m.width) // 2, 230))
         text_block(d, (60, 70), "A person stays in charge", font(52, "Bold"), width_chars=30)
+        d.text((60, 150), "on land" if kind == "land" else "at sea", font=font(34), fill=MUTED)
         y = 230 + m.height + 35
-        d.text(
-            (60, y),
-            f"Duplicate alerts: {int(al.loc[0, 'alerts'])} → {int(al.loc[3, 'alerts'])}, no swimmer lost",
-            font=font(38, "Bold"),
-            fill=ACCENT,
+        head = (
+            "Confirm or reject every alert"
+            if kind == "land"
+            else f"Duplicate alerts: {int(al.loc[0, 'alerts'])} → {int(al.loc[3, 'alerts'])}, no swimmer lost"
         )
+        d.text((60, y), head, font=font(38, "Bold"), fill=ACCENT)
         text_block(
             d,
             (60, y + 70),
-            "Operators confirm or reject each alert. A rejected spot stops alerting; every decision is logged.",
+            "A rejected spot stops alerting; every decision is logged and shared with every operator.",
             font(34),
             width_chars=48,
         )
@@ -270,9 +311,10 @@ def main():
         ff.stdin.write(im.tobytes())
     # 5. TAK
     cot = (
-        '<event type="a-u-S" uid="esa-drone-1-swimmer-5">\n'
-        '  <point lat="47.671774" lon="9.269403" ce="15.0"/>\n'
-        '  <detail><contact callsign="Swimmer 5 ?"/></detail>\n</event>'
+        '<event type="a-u-S" uid="esa-drone-1-swimmer-5">  sea\n'
+        '  <point lat="47.671774" lon="9.269403" ce="15.0"/>\n\n'
+        '<event type="a-u-G" uid="esa-drone-1-person-172"> land\n'
+        '  <point lat="60.149994" lon="24.950095" ce="15.0"/>'
     )
     im = text_card(
         "Alerts go to the map rescue teams already use",
@@ -280,8 +322,6 @@ def main():
         "its marker. Tested in CI against a real TAK server.",
         "",
     )
-    from PIL import ImageDraw
-
     d = ImageDraw.Draw(im)
     d.rounded_rectangle([60, 760, W - 60, 1010], radius=12, fill=(24, 28, 34))
     mono = font(26) if not Path("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf").exists() else None
@@ -317,24 +357,35 @@ def main():
         ),
         6,
     )
+
     # 7. text prompts
+    def ap_(v):
+        return f"{v:.2f}"
+
+    sea_txt, sea_ft = pr.loc["yoloe11m_p3_synonyms_test", "AP_swimmer"], two.loc["ft_y11n_1280", "AP_swimmer"]
+    land_txt, land_ft = vp.loc["yoloe11m_land", "AP_pedestrian"], vp.loc["ft_y11n_1280", "AP_pedestrian"]
     hold(
-        stat_card(
-            "Can you just type “person in the water”? Not yet.",
-            f"{pr.loc['yoloe11m_p3_synonyms_test', 'AP_swimmer']:.2f}",
-            f"{two.loc['ft_y11n_1280', 'AP_swimmer']:.2f}",
-            "swimmer AP: text-prompt model (3× larger) → small fine-tuned model",
-            "A 4-epoch fine-tune beats the open-vocabulary model at a tenth of the compute. Text search stays as a tool "
-            "for things the model has no class for.",
-            "YOLOE text prompts, wording chosen on validation videos, scored once on 1,200 test images.",
+        chart_card(
+            [
+                "At sea: swimmer AP",
+                ("text prompts (YOLOE-11m, no training)", float(sea_txt), ap_(sea_txt), False),
+                ("small model, fine-tuned", float(sea_ft), ap_(sea_ft), True),
+                "On land: pedestrian AP",
+                ("text prompts (YOLOE-11m, no training)", float(land_txt), ap_(land_txt), False),
+                ("small model, fine-tuned", float(land_ft), ap_(land_ft), True),
+            ],
+            "Can you just type “find a person”?",
+            "Open-vocabulary detection, measured against small fine-tuned models on unseen test images.",
+            "The text-prompt model is 3× larger and needs ~10× the compute. Text search stays as a tool for things the "
+            "trained model has no class for.",
         ),
-        5.5,
+        6.5,
     )
     # 8. close
     hold(
         text_card(
             "Open source. Every number measured, and checked in CI.",
-            "122 README numbers are tested against the results files on every push.\n\nNext: NVIDIA Jetson, "
+            "128 README numbers are tested against the results files on every push.\n\nNext: NVIDIA Jetson, "
             "measuring watts and joules at the frame rate a search really needs.",
             "CPU measurements so far. Research project on public data, not for operational rescue use.",
             "github.com/mustafarkhan/edge-situational-awareness",

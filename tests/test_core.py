@@ -317,6 +317,12 @@ def test_cot_over_udp_arrives_intact():
     rx.close()
 
 
+def test_land_alerts_are_ground_markers():
+    land = {**ALERT, "label": "person"}
+    assert _ET.fromstring(alert_event(land)).get("type") == "a-u-G"
+    assert _ET.fromstring(alert_event(ALERT)).get("type") == "a-u-S"
+
+
 def test_bad_tak_url_is_rejected():
     with pytest.raises(ValueError):
         CotSender("http://example.com")

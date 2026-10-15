@@ -1,0 +1,27 @@
+{
+ "persons": 1255,
+ "images": 477,
+ "conf": 0.25,
+ "iou": 0.3,
+ "recall": 0.91,
+ "recall_night": 0.929,
+ "recall_day": 0.861,
+ "precision": 0.746,
+ "false_alarms_per_image": 0.91,
+ "px_input_p2_p50_p98": [
+  9.5,
+  16.1,
+  28.4
+ ],
+ "person_size_m": {
+  "n": 130,
+  "hfov_deg": 25.0,
+  "p10_25_50_75_90": [
+   0.78,
+   0.828,
+   0.942,
+   1.15,
+   1.36
+  ]
+ }
+}
