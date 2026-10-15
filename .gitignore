@@ -28,3 +28,4 @@ configs/datasets/*.yaml
 !models/sds_y11n_ep4.pt
 !web/sample/*.jsonl
 !samples/*/telemetry.jsonl
+!models/hit_y11n_ep5.pt

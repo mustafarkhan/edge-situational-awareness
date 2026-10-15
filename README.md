@@ -4,8 +4,9 @@
 [![ROS 2](https://github.com/mustafarkhan/edge-situational-awareness/actions/workflows/ros2.yml/badge.svg)](https://github.com/mustafarkhan/edge-situational-awareness/actions/workflows/ros2.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
-Detecting, tracking and geolocating people and vehicles (on land) and swimmers and boats (at sea) in drone
-video, built for embedded
+Detecting, tracking and geolocating people and vehicles (on land, by day and by thermal camera at night) and
+swimmers and boats (at sea) in drone video, planning the search and sending alerts to responders' TAK maps, built for
+embedded
 deployment (NVIDIA Jetson). Every number below was measured on public data, and each one links to
 the script and results file that produced it.
 
@@ -13,10 +14,10 @@ the script and results file that produced it.
 
 🎬 **[Demo video (3 min)](docs/video/demo_video.mp4)**, rendered only from real outputs by `docs/video/make_video.py`.
 
-> **Status (October 2026).** Land (VisDrone) and sea (SeaDronesSee) modules are done, measured on CPU:
-> data analysis, detector experiments, fine-tuning, tracking (simulated and **real** footage),
-> tilt-aware geolocation tested on **real flight logs**, INT8 quantisation, failure analysis and the live map.
-> The ROS 2 node is tested end to end on ROS 2 Humble in CI.
+> **Status (October 2026, v2).** Land (VisDrone), sea (SeaDronesSee) and thermal (HIT-UAV) modules are done, measured
+> on CPU: detection, tracking on real footage, tilt-aware geolocation on real flight logs, INT8, failure analysis,
+> **search planning**, an **operator review loop with TAK (ATAK) output**, and **text-prompt search**. The ROS 2 node takes
+> live MAVROS telemetry and is tested end to end in CI.
 > **Still to come:** TensorRT on a Jetson Orin Nano (speed, watts, joules per frame) with
 > [one command](benchmarks/run_on_jetson.sh).
 
@@ -35,6 +36,10 @@ the script and results file that produced it.
 | **At sea:** does the land recipe transfer? | Yes. Swimmer AP **0.027 → 0.185** (COCO 640 → fine-tuned 1280); boats 0.155 → 0.503 |
 | Can the official sea validation split be trusted? | No. It shares videos with train and **inflates swimmer AP by ~50%** (0.185 → 0.295), measured against a control |
 | Does tracking hold on real sea footage? | IDF1 **0.50–0.79** on 4 real clips; GMC makes no difference at these slow camera speeds (as the simulation predicts) |
+| **v2:** how high should a search drone fly? | Measured: ~5× more sea per hour at 100 m than at 20 m with 0.95 detection per pass; ~1 frame/s is enough for coverage at 10 m/s (§10) |
+| **v2:** can operators cope with the alerts? | Spatial de-duplication cuts alerts 45% (33 → 18) without losing a swimmer; alerts go to ATAK via Cursor on Target (§11) |
+| **v2:** can text prompts replace training? | No: a 4-epoch fine-tune still beats a 3× larger open-vocabulary model by 1.6× on swimmers (§12) |
+| **v2:** what about night? | Thermal: colour-trained AP 0.023 → fine-tuned **0.445**; better at night (0.471) than by day (0.338) (§13) |
 | Does tilt-aware geolocation help on real flights? | Better on 3 of 4 real clips (best: swimmer drift **3.2 → 1.0 m/s**). Worse on the fourth, whose attitude log disagrees with the video |
 
 ## Try it (no dataset download, about 5 minutes on a laptop CPU)
@@ -396,6 +401,39 @@ was chosen on the val split (8 videos), and the chosen wording was scored once o
   map and to TAK. It is useful for objects the trained model has no class for, provided they are bigger than a
   swimmer's head.
 
+## 13. At night: thermal cameras (v2)
+
+At night a colour camera sees almost nothing in the water, and a thermal camera sees body heat. This section repeats
+the recipe on **HIT-UAV** (Suo et al., Scientific Data 2023; CC0): 2,898 thermal frames, 640×512, people and vehicles at
+60–130 m, two-thirds at night ([`scripts/thermal_experiments.sh`](scripts/thermal_experiments.sh)).
+
+**Another leaky split.** HIT-UAV samples one frame every 15 from its videos and splits frames at random, so 54% of its
+test images have a training frame within 2 serial numbers (about 1 s apart). File names record the flight condition
+(day/night, altitude, camera angle), so [`data/convert_hituav.py`](data/convert_hituav.py) groups the 2,898 frames into
+105 condition groups (our stand-in for "one flight") and keeps whole groups out of training. That gives 1,902 training
+images, 183 val and **477 test images from groups never trained on**, plus 336 held-out "seen" frames from training
+groups. Thermal objects are bigger than at sea: median 27 px at the 640 px input.
+
+**Results** (person / car / bicycle, COCO AP; source [`hituav_shared.csv`](benchmarks/results/hituav_shared.csv)):
+
+| model | test AP | AP person | AP car | AP bicycle | **day AP** | **night AP** |
+|---|---|---|---|---|---|---|
+| YOLO11n COCO (colour photos) | 0.023 | 0.019 | 0.050 | 0.000 | 0.022 | 0.024 |
+| **YOLO11n fine-tuned, 5 CPU epochs** | **0.445** | 0.369 | 0.602 | 0.362 | 0.338 | **0.471** |
+
+- **A colour-trained detector is useless on thermal images** (AP 0.023). Five CPU epochs on thermal data take it to 0.445,
+  AP50 0.81. The model is in [`models/hit_y11n_ep5.pt`](models/hit_y11n_ep5.pt) ([model card](docs/MODEL_CARD_hit_y11n_ep5.md)).
+- **Night is better than day** for thermal (0.471 vs 0.338; people 0.407 vs 0.277): bodies stand out against ground that
+  has cooled. A colour camera behaves the other way (§6: precision falls from 70% to 44% at night).
+- **Altitude barely matters here.** AP per altitude bin ranges from 0.37 to 0.57 across 60–130 m, with no downward trend
+  (20–161 test images per bin). A person's median size shrinks from 21 px at 60 m to 12 px at 130 m, still inside
+  the range where detection held up at sea (§10).
+- **Leakage check:** the same model scores 0.465 on "seen" frames and 0.445 on held-out groups (+0.020). The COCO
+  control model gains +0.017 between the same two sets, so frame-level leakage here is about **+0.003 AP**, far less
+  than at sea (+0.04). One caution: groups are inferred from file names, and different camera angles at the same
+  altitude may come from the same session, so held-out groups may share some scenery with training.
+- HIT-UAV is all land scenes. Thermal detection **at sea** (warm heads in cold water, sun glint) is not tested.
+
 ## System
 
 ```mermaid
@@ -490,7 +528,8 @@ The figures and demo video show VisDrone and SeaDronesSee imagery for illustrati
 
 CPU measurements only so far; short fine-tunes (3–4 CPU epochs); life-saving appliances not yet detected; real tracking
 tested on four short sea clips only; real geolocation checked by a plausibility test (no ground-truth positions), and it
-depends on attitude telemetry that is wrong on one of four clips; ROS 2 tested in CI, not yet on the Jetson; not for operational use.
+depends on attitude telemetry that is wrong on one of four clips; search planning is a model built on measurements,
+not yet flown, and leaves false alarms out; thermal tested on land only; ROS 2 tested in CI, not yet on the Jetson; not for operational use.
 Details and failure images: [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
 ## Independence

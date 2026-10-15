@@ -262,6 +262,14 @@ Small-object AP is the metric that matters; overall mAP hides the problem.
   grouped by (day/night, altitude, angle) — 105 groups, a proxy for one flight — and whole groups are held out
   (`data/convert_hituav.py`): train 1,902, val 183, test 477, plus "seen" 336 held-out frames from training groups.
 - Thermal objects are larger than at sea: median 27 px at 640 px input (sea: 7 px).
+- **First training run was killed** (out of memory, 7 GB limit) when the YOLOE-11m prompt evaluation started next to it.
+  Lesson: one heavy job at a time on this machine; queued training after the prompt runs.
+- **Result** (5 CPU epochs, 640 px, 477 test images from held-out groups): COCO colour model AP 0.023 -> fine-tuned
+  **0.445** (AP50 0.81; person 0.369, car 0.602, bicycle 0.362). **Night 0.471 > day 0.338** (people 0.407 vs 0.277).
+  AP per altitude 0.37-0.57 over 60-130 m, no trend; person median size 21 px at 60 m, 12 px at 130 m.
+- **Leakage:** seen 0.465 vs held-out 0.445 (+0.020); COCO control +0.017 -> about +0.003, much smaller than at sea.
+  Possible reasons: thermal scenes are less distinctive than lake shores, or the condition groups are only a proxy for
+  flights (same session at different camera angles), which would also make the held-out set easier. Not resolved.
 
 ---
 

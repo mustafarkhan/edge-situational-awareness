@@ -138,6 +138,17 @@ CLAIMS: list[tuple[str, list[str]]] = [
             ("| **YOLO11n fine-tuned (§9)** |", SEA2, "ft_y11n_1280"),
         )
     ],
+    # v2: thermal
+    (
+        "| YOLO11n COCO (colour photos) |",
+        [v("hituav_shared.csv", {"tag": "coco_y11n_640_test"}, c) for c in ("AP", "AP_person", "AP_car", "AP_bicycle")]
+        + [v("hituav_shared.csv", {"tag": t}, "AP") for t in ("coco_y11n_640_test_day", "coco_y11n_640_test_night")],
+    ),
+    (
+        "| **YOLO11n fine-tuned, 5 CPU epochs** |",
+        [v("hituav_shared.csv", {"tag": "ft_y11n_640_test"}, c) for c in ("AP", "AP_person", "AP_car", "AP_bicycle")]
+        + [v("hituav_shared.csv", {"tag": t}, "AP") for t in ("ft_y11n_640_test_day", "ft_y11n_640_test_night")],
+    ),
 ]
 
 
