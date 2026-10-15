@@ -23,6 +23,7 @@ def main():
     ap.add_argument("--out", default=str(REPO / "docs/figures/operator_review.png"))
     ap.add_argument("--center", default="47.672414,9.268977")
     ap.add_argument("--zoom", default="17.9")
+    ap.add_argument("--video", default=None, help="also record the session to this .webm/.mp4 (for the demo video)")
     a = ap.parse_args()
     reviews = Path("/tmp/esa_reviews.jsonl")
     reviews.unlink(missing_ok=True)
@@ -45,7 +46,10 @@ def main():
 
         with sync_playwright() as p:
             b = p.chromium.launch()
-            page = b.new_page(viewport={"width": 1500, "height": 860})
+            vp = {"width": 1500, "height": 860}
+            vid_dir = Path(a.out).parent / "_rec"
+            ctx = b.new_context(viewport=vp, record_video_dir=str(vid_dir), record_video_size=vp) if a.video else b
+            page = ctx.new_page() if a.video else b.new_page(viewport=vp)
             page.goto(f"http://localhost:5173/?offline=1&center={a.center}&zoom={a.zoom}")
             page.wait_for_selector("button.reject", timeout=60_000)
             page.wait_for_timeout(1500)  # let a second alert arrive
@@ -55,6 +59,15 @@ def main():
             page.wait_for_selector("li.confirm", timeout=10_000)
             page.wait_for_timeout(2500)
             page.screenshot(path=a.out)
+            if a.video:
+                video = page.video
+                ctx.close()
+                subprocess.run(
+                    ["ffmpeg", "-y", "-loglevel", "error", "-i", video.path(), "-r", "30", a.video], check=True
+                )
+                for f in vid_dir.iterdir():
+                    f.unlink()
+                vid_dir.rmdir()
             b.close()
         print("screenshot ->", a.out)
         print("audit log:", reviews.read_text())
