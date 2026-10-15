@@ -149,6 +149,21 @@ CLAIMS: list[tuple[str, list[str]]] = [
         [v("hituav_shared.csv", {"tag": "ft_y11n_640_test"}, c) for c in ("AP", "AP_person", "AP_car", "AP_bicycle")]
         + [v("hituav_shared.csv", {"tag": t}, "AP") for t in ("ft_y11n_640_test_day", "ft_y11n_640_test_night")],
     ),
+    # v2: land search plan (thermal)
+    (
+        "| 25° (25 mm, the HIT-UAV camera) | 120 m |",
+        [
+            v("land_search_altitude.csv", {"hfov_deg": 25.0, "alt_m": 120}, c, f)
+            for c, f in (("px_on_person", "{:.0f} px"), ("p_per_pass", "{:.2f}"), ("km2_h_at_pod80", "{:.2f}"))
+        ],
+    ),
+    (
+        "| 45° (13 mm) | 60 m |",
+        [
+            v("land_search_altitude.csv", {"hfov_deg": 45.0, "alt_m": 60}, c, f)
+            for c, f in (("px_on_person", "{:.0f} px"), ("p_per_pass", "{:.2f}"), ("km2_h_at_pod80", "{:.2f}"))
+        ],
+    ),  # fmt: skip
 ]
 
 

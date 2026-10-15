@@ -36,7 +36,7 @@ the script and results file that produced it.
 | **At sea:** does the land recipe transfer? | Yes. Swimmer AP **0.027 → 0.185** (COCO 640 → fine-tuned 1280); boats 0.155 → 0.503 |
 | Can the official sea validation split be trusted? | No. It shares videos with train and **inflates swimmer AP by ~50%** (0.185 → 0.295), measured against a control |
 | Does tracking hold on real sea footage? | IDF1 **0.50–0.79** on 4 real clips; GMC makes no difference at these slow camera speeds (as the simulation predicts) |
-| **v2:** how high should a search drone fly? | Measured: ~5× more sea per hour at 100 m than at 20 m with 0.95 detection per pass; ~1 frame/s is enough for coverage at 10 m/s (§10) |
+| **v2:** how high should a search drone fly? | At sea by day: ~5× more sea per hour at 100 m than at 20 m, 0.95 detection per pass, ~1 frame/s is enough. On land at night (thermal): ~1 km²/h at 120 m, and the lens choice matters as much as altitude (§10) |
 | **v2:** can operators cope with the alerts? | Spatial de-duplication cuts alerts 45% (33 → 18) without losing a swimmer; alerts go to ATAK via Cursor on Target (§11) |
 | **v2:** can text prompts replace training? | No: a 4-epoch fine-tune still beats a 3× larger open-vocabulary model by 1.6× on swimmers (§12) |
 | **v2:** what about night? | Thermal: colour-trained AP 0.023 → fine-tuned **0.445**; better at night (0.471) than by day (0.338) (§13) |
@@ -292,11 +292,15 @@ attitude telemetry** matters as much as the geometry.
 The map app replaying real flight DJI_0055: drone path from its own GPS (yellow), swimmers (red) and boats (blue)
 placed with the tilt-aware model.
 
-## 10. Search planning: how high to fly (v2)
+## 10. Search planning: how high to fly, at sea and on land (v2)
 
-A drone that flies higher covers more sea per minute, but each swimmer covers fewer pixels. This section measures that
-trade-off instead of guessing it, then turns it into a flight plan. Scripts: [`benchmarks/detection_vs_range.py`](benchmarks/detection_vs_range.py),
-[`benchmarks/search_planning.py`](benchmarks/search_planning.py); model: [`src/esa/search.py`](src/esa/search.py).
+A drone that flies higher covers more ground or sea per minute, but each person covers fewer pixels. This section
+measures that trade-off instead of guessing it, for a swimmer at sea by day (10a) and a person on land at night with a
+thermal camera (10b), then turns it into flight plans. Scripts: [`benchmarks/detection_vs_range.py`](benchmarks/detection_vs_range.py),
+[`benchmarks/search_planning.py`](benchmarks/search_planning.py), [`benchmarks/land_search.py`](benchmarks/land_search.py);
+model: [`src/esa/search.py`](src/esa/search.py).
+
+### 10a. At sea, by day (colour camera, swimmers)
 
 **1. Does a swimmer get a box at all?** All 4,221 swimmers in the 1,200 unseen test images, sea model, 1280 px,
 confidence 0.25. For search, a box *on* the swimmer is what matters, so a hit is IoU ≥ 0.3 (AP uses 0.5–0.95).
@@ -342,6 +346,32 @@ is within 0.10 below what was measured, i.e. conservative ([`search_validation.c
 Assumptions: calm water, daylight, camera straight down, swimmer size fixed per scenario, false alarms not yet in the
 plan. These are listed in [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
+### 10b. On land, at night (thermal camera, a missing person)
+
+The same method on the thermal test set (§13), which records altitude and camera angle for every image
+([`benchmarks/land_search.py`](benchmarks/land_search.py)). The thermal model puts a box on **91%** of the 1,255
+people in the 477 held-out images (93% at night, 86% by day), with 75% precision and 0.9 false alarms per image.
+People measure 0.94 m (median box in 130 straight-down frames). Predicted pixel size and detection rate match the
+measurements at 80 m and 120 m within 2 px and 0.03 ([`land_search_validation.csv`](benchmarks/results/land_search_validation.csv)).
+No land video with identities is available to measure look correlation, so each pass counts as **one look**
+(conservative).
+
+![Thermal: detection vs size, and ground searched per hour vs altitude](docs/figures/land_search.png)
+
+| thermal lens (640×512 sensor) | best altitude inside the data | person | P(detect) per pass | ground searched per hour at 80% POD |
+|---|---|---|---|---|
+| 25° (25 mm, the HIT-UAV camera) | 120 m | 11 px | 0.88 | **1.04 km²** |
+| 45° (13 mm) | 60 m | 12 px | 0.89 | 0.99 km² |
+
+([`land_search_altitude.csv`](benchmarks/results/land_search_altitude.csv))
+
+- **Choosing the lens is choosing the altitude.** The wide lens sees more ground but runs out of pixels at 77 m. The
+  narrow lens can fly to 143 m before it does, so under the EU 120 m ceiling the narrow lens is slightly better.
+- **Land at night is slower than sea by day:** about 1 km² per hour against 2.7, because a 640-pixel thermal sensor
+  has fewer pixels than a 4K colour camera.
+- Example mission: [`samples/land_search_example.plan`](samples/land_search_example.plan): 0.5 km², 120 m, 18 tracks
+  29 m apart, 18.5 km, 31 min. Open ground only: thermal cannot see through tree canopy.
+
 ## 11. Operator in the loop: review, de-duplication, TAK (v2)
 
 **Confirm / Reject.** Each alert in the map app has Confirm and Reject buttons. Every decision goes to an audit log
@@ -366,7 +396,8 @@ is now treated as the same swimmer ([`benchmarks/alert_load.py`](benchmarks/aler
 radius was chosen on these four clips, so treat it as a starting value.
 
 **TAK (ATAK / WinTAK / TAK Server).** [`src/esa/cot.py`](src/esa/cot.py) sends Cursor-on-Target messages. Each alert
-becomes a marker (type `a-u-S`, unknown object on the sea surface, 15 m position uncertainty, "unconfirmed" until an
+becomes a marker (`a-u-S`, unknown object on the sea surface, for swimmers and boats; `a-u-G`, unknown on the ground,
+for people and vehicles on land; 15 m position uncertainty; "unconfirmed" until an
 operator confirms it). The drone itself is sent at 1 Hz, and a rejected alert deletes its marker. Transport is UDP
 (ATAK mesh `239.2.3.1:6969`) or TCP to a TAK server:
 `python web/backend/server.py --replay web/sample/sea_DJI_0055.jsonl --tak udp://239.2.3.1:6969`.
@@ -401,7 +432,7 @@ was chosen on the val split (8 videos), and the chosen wording was scored once o
   map and to TAK. It is useful for objects the trained model has no class for, provided they are bigger than a
   swimmer's head.
 
-## 13. At night: thermal cameras (v2)
+## 13. On land at night: thermal cameras (v2)
 
 At night a colour camera sees almost nothing in the water, and a thermal camera sees body heat. This section repeats
 the recipe on **HIT-UAV** (Suo et al., Scientific Data 2023; CC0): 2,898 thermal frames, 640×512, people and vehicles at
