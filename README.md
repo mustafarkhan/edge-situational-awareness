@@ -405,7 +405,7 @@ CI runs this end to end against a real open-source TAK server (taky): a TAK clie
 alert and the delete after an operator rejects it ([`tests/tak_e2e.py`](tests/tak_e2e.py)). TLS (port 8089) is not
 implemented.
 
-## 12. Text-prompt search: "find a person in the water" (v2)
+## 12. Text-prompt search: "find a person", at sea and on land (v2)
 
 Open-vocabulary detectors find things described in words, with no training for those words. That would be ideal
 for search ("orange life raft", "overturned kayak"), so this section measures it on the same 1,200 sea test images.
@@ -421,6 +421,19 @@ was chosen on the val split (8 videos), and the chosen wording was scored once o
 | YOLOE-11m, text prompts | no | 0.241 | 0.118 | 0.363 | 2,681 |
 | **YOLO11n fine-tuned (§9)** | yes, 4 CPU epochs | **0.344** | **0.185** | **0.503** | 276 |
 
+**On land** (VisDrone, 548 unseen val images, pedestrian + car, one fixed wording "person | pedestrian | person
+walking", not tuned; [`visdrone_prompts_shared.csv`](benchmarks/results/visdrone_prompts_shared.csv),
+[`visdrone_prompts_prompts_shared.csv`](benchmarks/results/visdrone_prompts_prompts_shared.csv)):
+
+| model (1280 px, land) | trained on drone data? | AP | **AP pedestrian** | AP car | CPU ms |
+|---|---|---|---|---|---|
+| YOLO11n, COCO "person" / "car" | no | 0.251 | 0.137 | 0.366 | 279 |
+| YOLOE-11s, text prompts | no | 0.254 | 0.124 | 0.384 | 1,724 |
+| YOLOE-11m, text prompts | no | 0.285 | 0.139 | 0.431 | 3,357 |
+| **YOLO11n fine-tuned (§2)** | yes, 3 CPU epochs | **0.328** | **0.151** | **0.505** | 248 |
+
+- **Same pattern on land and at sea:** text prompts land between a plain COCO model and a short fine-tune, at 3–14×
+  the compute. On land the gap is smaller for people (0.139 vs 0.151) than for cars (0.431 vs 0.505).
 - **Wording matters a little.** On val, the best phrasing ("swimmer | person in water | person swimming | head above
   water") scored 0.095 swimmer AP and the worst ("swimmer") 0.078.
 - **For swimmers, a short fine-tune beats text prompts clearly:** 1.6× the swimmer AP of the medium text model, at a

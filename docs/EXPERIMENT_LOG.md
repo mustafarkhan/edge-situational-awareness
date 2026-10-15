@@ -271,6 +271,18 @@ Small-object AP is the metric that matters; overall mAP hides the problem.
   Possible reasons: thermal scenes are less distinctive than lake shores, or the condition groups are only a proxy for
   flights (same session at different camera angles), which would also make the held-out set easier. Not resolved.
 
+### 2026-10-15 — v2 on land as well as sea
+- **Land search planning** (`benchmarks/land_search.py`, thermal model, 477 held-out images): 91% of 1,255 people get a
+  box (night 93%, day 86%), precision 75%, 0.9 false alarms per image. Person size 0.94 m (130 straight-down boxes,
+  XT2 25 mm lens = 25 x 20 deg, from DJI's spec; the paper gives only the focal length). Prediction matches
+  measurement at 80 m and 120 m within 2 px / 0.03. One look per pass (no land video with identities to measure
+  correlation). Result: 25 deg lens 1.04 km^2/h at 120 m; 45 deg lens 0.99 km^2/h at 60 m, after which persons drop
+  below the measured range (77 m ceiling vs 143 m).
+- A bin with a single person (0-8 px, p = 0) dragged the extrapolated curve to zero; bins merged so each has 30+ people.
+- **Text prompts on land** (VisDrone val, pedestrian + car, one untuned wording): COCO 0.251, YOLOE-11s 0.254,
+  YOLOE-11m 0.285, fine-tuned 0.328 AP. Same ordering as at sea.
+- TAK: ground marker type a-u-G for land classes.
+
 ---
 
 ## Template

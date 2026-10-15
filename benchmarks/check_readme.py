@@ -164,6 +164,16 @@ CLAIMS: list[tuple[str, list[str]]] = [
             for c, f in (("px_on_person", "{:.0f} px"), ("p_per_pass", "{:.2f}"), ("km2_h_at_pod80", "{:.2f}"))
         ],
     ),  # fmt: skip
+    # v2: text prompts on land
+    *[
+        (anchor, [v(csv_, {"tag": tag}, c) for c in ("AP", "AP_pedestrian", "AP_car")])
+        for anchor, csv_, tag in (
+            ('| YOLO11n, COCO "person" / "car" |', "visdrone_prompts_shared.csv", "coco_y11n_1280"),
+            ("| YOLOE-11s, text prompts | no | 0.25", "visdrone_prompts_prompts_shared.csv", "yoloe11s_land"),
+            ("| YOLOE-11m, text prompts | no | 0.28", "visdrone_prompts_prompts_shared.csv", "yoloe11m_land"),
+            ("| **YOLO11n fine-tuned (§2)** |", "visdrone_prompts_shared.csv", "ft_y11n_1280"),
+        )
+    ],
 ]
 
 
