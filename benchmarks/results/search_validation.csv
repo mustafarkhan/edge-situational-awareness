@@ -1,0 +1,4 @@
+alt_bin_m,swimmers,alt_median_m,px_median_measured,px_predicted,p_measured,p_predicted
+40-60,66,53.4,23.0,20.2,0.955,0.854
+60-80,110,71.1,13.0,15.2,0.927,0.854
+80-130,463,96.2,11.8,11.2,0.883,0.854

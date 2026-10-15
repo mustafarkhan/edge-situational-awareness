@@ -1,0 +1,25 @@
+{
+ "swimmers": 4221,
+ "conf": 0.25,
+ "iou": 0.3,
+ "recall": 0.843,
+ "precision": 0.758,
+ "false_alarms_per_image": 1.072,
+ "images": 1200,
+ "px_input_p2_p50_p98": [
+  4.3,
+  13.1,
+  41.0
+ ],
+ "swimmer_size_m": {
+  "n": 639,
+  "hfov_deg_assumed": 65.5,
+  "p10_25_50_75_90": [
+   0.793,
+   0.928,
+   1.084,
+   1.279,
+   1.423
+  ]
+ }
+}

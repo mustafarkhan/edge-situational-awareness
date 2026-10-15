@@ -23,7 +23,7 @@ def predict_ultralytics(model_path, gt, root, imgsz=640, device=0, max_det=300, 
     whole precision-recall curve, so you must keep low-confidence boxes for evaluation."""
     from ultralytics import YOLO
 
-    model = YOLO(model_path)
+    model = YOLO(model_path) if isinstance(model_path, (str, Path)) else model_path  # or a ready model object
     preds, times = [], []
     for img in gt["images"]:
         t0 = time.perf_counter()

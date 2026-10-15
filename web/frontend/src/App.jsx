@@ -62,6 +62,8 @@ export default function App() {
   const [status, setStatus] = useState("connecting…");
   const [frame, setFrame] = useState(null);
   const [alerts, setAlerts] = useState([]);
+  const [reviews, setReviews] = useState({}); // track_id -> "confirm" | "reject", shared by all operators
+  const wsRef = useRef(null);
 
   useEffect(() => {
     const m = new maplibregl.Map({ container: mapDiv.current, style: OFFLINE ? OFFLINE_STYLE : STYLE,
@@ -97,12 +99,17 @@ export default function App() {
     let ws, retry;
     const connect = () => {
       ws = new WebSocket(WS_URL);
+      wsRef.current = ws;
       ws.onopen = () => setStatus("live");
       ws.onclose = () => { setStatus("disconnected – retrying"); retry = setTimeout(connect, 2000); };
       ws.onmessage = (ev) => {
         const msg = JSON.parse(ev.data);
+        if (msg.type === "review") {  // a decision by this or another operator
+          setReviews((r) => ({ ...r, [msg.track_id]: msg.decision }));
+          return;
+        }
         if (msg.frame === 0) {  // a replay restarted: start clean so nothing is counted twice
-          setAlerts([]); seenTracks.current = new Set(); trails.current = new Map();
+          setAlerts([]); setReviews({}); seenTracks.current = new Set(); trails.current = new Map();
         }
         setFrame(msg);
         if (msg.alerts?.length) setAlerts((a) => [...msg.alerts.map((x) => ({ ...x, at: new Date() })), ...a].slice(0, 20));
@@ -148,6 +155,11 @@ export default function App() {
       geometry: { type: "Point", coordinates: [msg.drone.lon, msg.drone.lat] }, properties: {} }]));
   }
 
+  const review = (a, decision) =>
+    wsRef.current?.readyState === 1 &&
+    wsRef.current.send(JSON.stringify({ type: "review", track_id: a.track_id, decision }));
+  const pending = alerts.filter((a) => !reviews[a.track_id]).length;
+
   const counts = {};
   for (const d of frame?.detections ?? []) counts[d.label] = (counts[d.label] ?? 0) + 1;
 
@@ -162,15 +174,25 @@ export default function App() {
         {Object.keys(counts).length ? (
           <ul>{Object.entries(counts).map(([k, v]) => <li key={k}>{k}: {v}</li>)}</ul>
         ) : <p className="muted">nothing detected</p>}
-        <h2>Alerts</h2>
+        <h2>Alerts {pending > 0 && <span className="badge">{pending} to review</span>}</h2>
         {alerts.length ? (
-          <ul className="alerts">{alerts.map((a, i) => (
-            <li key={i}><b>{a.message}</b><br />
-              <span className="muted">{a.at.toLocaleTimeString()} · {a.lat?.toFixed(5)}, {a.lon?.toFixed(5)}</span></li>
-          ))}</ul>
+          <ul className="alerts">{alerts.map((a, i) => {
+            const r = reviews[a.track_id];
+            return (
+              <li key={i} className={r ? `reviewed ${r}` : ""}><b>{a.message}</b><br />
+                <span className="muted">{a.at.toLocaleTimeString()} · {a.lat?.toFixed(5)}, {a.lon?.toFixed(5)}</span>
+                {r ? <div className="decision">{r === "confirm" ? "✓ confirmed" : "✕ rejected – alerts here muted"}</div> : (
+                  <div className="actions">
+                    <button className="confirm" onClick={() => review(a, "confirm")}>Confirm</button>
+                    <button className="reject" onClick={() => review(a, "reject")}>Reject</button>
+                  </div>
+                )}
+              </li>
+            );
+          })}</ul>
         ) : <p className="muted">none</p>}
         {OFFLINE && <p className="muted small">Offline map: background grid every 20 m, dashed yellow line = drone path.</p>}
-        <p className="muted small">Positions are estimated from pixel location assuming a nadir camera over flat ground — see docs/LIMITATIONS.md.</p>
+        <p className="muted small">Positions are estimated from pixel location, drone GPS, height and camera tilt, assuming flat water — see docs/LIMITATIONS.md. Automatic detections: confirm before acting.</p>
       </aside>
     </div>
   );

@@ -38,7 +38,8 @@ def power_mode() -> str:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True, help=".pt, .onnx or .engine")
-    ap.add_argument("--data", required=True)
+    ap.add_argument("--data", default=None, help="dataset YAML (needed for the accuracy check)")
+    ap.add_argument("--images", default=None, help="or just a folder of images: timing/power only, no dataset needed")
     ap.add_argument("--split", default="test")
     ap.add_argument("--imgsz", type=int, default=640)
     ap.add_argument("--n", type=int, default=500, help="images for the timing loop")
@@ -48,11 +49,16 @@ def main():
     ap.add_argument("--out", default=str(REPO / "benchmarks" / "results" / "jetson.csv"))
     args = ap.parse_args()
 
-    cfg = yaml.safe_load(Path(args.data).read_text())
-    img_dir = Path(cfg["path"]) / cfg[args.split]
-    paths = sorted(p for p in img_dir.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png"})[: args.n]
-    # load into RAM first so we time the model, not the SD card / SSD
+    if args.images:
+        img_dir = Path(args.images)
+        args.skip_accuracy = True
+    else:
+        cfg = yaml.safe_load(Path(args.data).read_text())
+        img_dir = Path(cfg["path"]) / cfg[args.split]
+    paths = sorted(p for p in img_dir.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png"})
+    # load into RAM first so we time the model, not the SD card / SSD; repeat a short clip to reach n frames
     frames = [cv2.imread(str(p)) for p in paths]
+    frames = (frames * (args.n // max(len(frames), 1) + 1))[: args.n]
     model = YOLO(args.model, task="detect")
 
     for f in frames[: args.warmup]:  # first runs include CUDA/TensorRT init; never time them
@@ -79,6 +85,7 @@ def main():
         "device": platform.node(),
         "power_mode": power_mode(),
         "n_images": len(lat),
+        "images": str(img_dir),
         "lat_mean_ms": round(lat.mean(), 2),
         "lat_p50_ms": round(np.percentile(lat, 50), 2),
         "lat_p95_ms": round(np.percentile(lat, 95), 2),

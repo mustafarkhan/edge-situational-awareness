@@ -198,3 +198,150 @@ def test_smoothing_turns_sample_and_hold_into_a_ramp_and_unwraps_heading():
     assert [o["alt_m"] for o in out] == pytest.approx([10.0, 11.5, 13.0, 13.0])
     # 358 -> 2 is a 4 deg turn through north, not a 356 deg turn the other way
     assert out[1]["heading_deg"] == pytest.approx(0.0, abs=1e-9) or out[1]["heading_deg"] == pytest.approx(360.0)
+
+
+# --- search planning (src/esa/search.py) -------------------------------------------------------
+import json as _json  # noqa: E402
+import math as _math  # noqa: E402
+
+from esa.search import (  # noqa: E402
+    Camera,
+    DetectionCurve,
+    evaluate,
+    lawnmower,
+    p_pass,
+    path_length_m,
+    qgc_plan,
+    spacing_for_pod,
+)
+
+
+def test_detection_curve_is_isotonic_not_optimistic():
+    # a noisy dip must not make bigger objects worse, and must not be lifted to the best bin either
+    c = DetectionCurve.from_bins([5, 10, 20], [0.2, 0.6, 0.4], [100, 100, 300])
+    assert c(0) == 0.0 and c(5) == pytest.approx(0.2)
+    assert c(10) == pytest.approx(c(20)) == pytest.approx((0.6 * 100 + 0.4 * 300) / 400)
+    assert c(100) == pytest.approx(c(20))
+    assert not c.measured(1) or c.min_px == 0
+
+
+def test_pixels_on_target_halves_when_altitude_doubles():
+    cam = Camera(hfov_deg=90.0, input_px=1000)  # footprint = 2 * alt
+    assert cam.footprint_m(50)[0] == pytest.approx(100.0)
+    assert cam.pixels_on(0.5, 50) == pytest.approx(5.0)
+    assert cam.pixels_on(0.5, 100) == pytest.approx(2.5)
+
+
+def test_looks_are_capped_by_independence():
+    assert p_pass(0.5, looks=10, independent_looks=1) == pytest.approx(0.5)
+    assert p_pass(0.5, looks=10, independent_looks=2) == pytest.approx(0.75)
+    assert p_pass(0.5, looks=0.3, independent_looks=5) == pytest.approx(0.5)  # at least one look
+
+
+def test_sweep_width_is_footprint_times_pass_probability():
+    cam = Camera(hfov_deg=90.0, input_px=1000, aspect=1.0)
+    p = evaluate(DetectionCurve([5.0], [0.4]), cam, alt_m=50, speed_mps=10, fps=1, swimmer_m=0.5, independent_looks=1)
+    assert p.sweep_width_m == pytest.approx(100 * 0.4)
+    assert p.sweep_rate_km2_h == pytest.approx(40 * 10 * 3.6 / 1000)
+
+
+def test_spacing_for_pod_inverts_the_exponential_law():
+    s = spacing_for_pod(30.0, 0.8)
+    assert 1 - _math.exp(-30.0 / s) == pytest.approx(0.8)
+
+
+def test_lawnmower_covers_the_box_and_alternates_direction():
+    pts = lawnmower(61.5, 23.7, width_m=100, length_m=400, spacing_m=25, heading_deg=0)
+    assert len(pts) == 8  # 4 tracks x 2 ends
+    assert pts[1][0] > pts[0][0] and pts[3][0] < pts[2][0]  # north, then back south
+    assert path_length_m(pts) == pytest.approx(4 * 400 + 3 * 25, rel=1e-3)
+
+
+def test_qgc_plan_is_valid_mission_json():
+    pts = lawnmower(61.5, 23.7, 50, 100, 25)
+    plan = _json.loads(_json.dumps(qgc_plan(pts, 30.0, 8.0)))
+    items = plan["mission"]["items"]
+    assert plan["fileType"] == "Plan" and items[0]["command"] == 178
+    assert [i["command"] for i in items[1:]] == [16] * len(pts)
+    assert items[1]["params"][4:] == [pts[0][0], pts[0][1], 30.0]
+
+
+# --- TAK / Cursor on Target and the operator loop ------------------------------------------------
+import socket as _socket  # noqa: E402
+import xml.etree.ElementTree as _ET  # noqa: E402
+from datetime import datetime as _dt  # noqa: E402
+from datetime import timezone as _tz  # noqa: E402
+
+from esa.cot import CotSender, alert_event, delete_event, drone_event  # noqa: E402
+
+ALERT = {
+    "track_id": 7,
+    "label": "swimmer",
+    "lat": 61.4978123,
+    "lon": 23.7610456,
+    "message": "swimmer detected (track 7)",
+}
+
+
+def test_alert_cot_has_required_fields():
+    now = _dt(2026, 10, 15, 12, 0, 0, tzinfo=_tz.utc)
+    ev = _ET.fromstring(alert_event(ALERT, "drone-A", ce_m=12.0, now=now, stale_s=60))
+    assert ev.tag == "event" and ev.get("version") == "2.0"
+    assert ev.get("type") == "a-u-S" and ev.get("uid") == "drone-A-swimmer-7"
+    assert ev.get("time") == "2026-10-15T12:00:00.000Z" and ev.get("stale") == "2026-10-15T12:01:00.000Z"
+    pt = ev.find("point")
+    assert float(pt.get("lat")) == pytest.approx(ALERT["lat"]) and float(pt.get("ce")) == 12.0
+    assert "unconfirmed" in ev.find("detail/remarks").text
+    assert ev.find("detail/link").get("uid") == "drone-A"
+
+
+def test_confirm_and_delete_events():
+    ok = _ET.fromstring(alert_event(ALERT, "drone-A", confirmed=True))
+    assert "CONFIRMED" in ok.find("detail/remarks").text
+    de = _ET.fromstring(delete_event("drone-A-swimmer-7"))
+    assert de.get("type") == "t-x-d-d" and de.find("detail/link").get("uid") == "drone-A-swimmer-7"
+    assert de.find("detail/__forcedelete") is not None
+    dr = _ET.fromstring(drone_event("drone-A", 61.5, 23.7, alt_m=40.0))
+    assert dr.get("type") == "a-f-A-M-H-Q" and dr.find("point").get("hae") == "40.0"
+
+
+def test_cot_over_udp_arrives_intact():
+    rx = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+    rx.bind(("127.0.0.1", 0))
+    rx.settimeout(2)
+    tx = CotSender(f"udp://127.0.0.1:{rx.getsockname()[1]}")
+    xml = alert_event(ALERT)
+    tx.send(xml)
+    assert rx.recv(65535).decode() == xml
+    tx.close()
+    rx.close()
+
+
+def test_bad_tak_url_is_rejected():
+    with pytest.raises(ValueError):
+        CotSender("http://example.com")
+
+
+def test_rejected_spot_suppresses_new_alerts_nearby_only():
+    am = AlertManager({"swimmer"}, min_frames=1, suppress_radius_m=10, suppress_s=600)
+    near = {"track_id": 2, "label": "swimmer", "lat": 61.0, "lon": 23.0}
+    am.reject(61.0, 23.0, "swimmer", now=0)
+    assert am.update([near], now=10) == [] and am.suppressed == 1
+    far = {"track_id": 3, "label": "swimmer", "lat": 61.001, "lon": 23.0}  # ~111 m away
+    assert len(am.update([far], now=10)) == 1
+    later = {"track_id": 4, "label": "swimmer", "lat": 61.0, "lon": 23.0}
+    assert len(am.update([later], now=700)) == 1  # rejection has expired
+
+
+def test_dedupe_merges_a_new_track_id_at_the_same_spot_only():
+    am = AlertManager({"swimmer"}, min_frames=1, dedupe_radius_m=3, dedupe_s=60)
+    assert len(am.update([{"track_id": 1, "label": "swimmer", "lat": 61.0, "lon": 23.0}], now=0)) == 1
+    same = {"track_id": 9, "label": "swimmer", "lat": 61.00001, "lon": 23.0}  # ~1.1 m away: same swimmer, new ID
+    assert am.update([same], now=5) == [] and am.deduplicated == 1
+    other = {"track_id": 10, "label": "swimmer", "lat": 61.0001, "lon": 23.0}  # ~11 m away: another swimmer
+    assert len(am.update([other], now=5)) == 1
+    again = {"track_id": 11, "label": "swimmer", "lat": 61.0, "lon": 23.0}
+    assert len(am.update([again], now=100)) == 1  # older than dedupe_s: raise again
+    off = AlertManager({"swimmer"}, min_frames=1)  # default: off, as before
+    off.update([{"track_id": 1, "label": "swimmer", "lat": 61.0, "lon": 23.0}], now=0)
+    assert len(off.update([same], now=1)) == 1

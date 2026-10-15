@@ -25,6 +25,21 @@ jobs:
       - name: README numbers match the results files
         run: python benchmarks/check_readme.py
 
+  tak:
+    name: TAK end to end (real TAK server)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install the bridge and an open-source TAK server (taky)
+        run: |
+          pip install fastapi "uvicorn[standard]" websockets
+          python -m venv /tmp/taky && /tmp/taky/bin/pip install taky "setuptools<70"
+      - name: Bridge -> TAK server -> TAK client, with an operator rejecting an alert
+        run: python tests/tak_e2e.py --taky /tmp/taky/bin/taky
+
   quickstart:
     name: README quick start on the sample clip
     runs-on: ubuntu-latest

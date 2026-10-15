@@ -40,6 +40,7 @@ TABLES = {
     "geo_sensitivity": ["error_source", "level", "median_m", "p95_m", "max_m"],
     "failure_analysis": ["dimension", "bucket", "objects", "recall"],
     "jetson_accuracy": ["tag", "imgsz", "AP50", "AP", "AP_small", "cpu_ms_per_image_median"],
+    "jetson_sea_accuracy": ["tag", "imgsz", "AP50", "AP", "AP_small", "AP_swimmer", "AP_boat"],
     "latency_cpu": ["tag", "model", "imgsz", "lat_p50_ms", "lat_p95_ms", "lat_p99_ms", "fps"],
     "accuracy": ["tag", "split", "imgsz", "sahi", "AP50", "AP", "AP_small", "ms_per_image_median"],
     "jetson": [
