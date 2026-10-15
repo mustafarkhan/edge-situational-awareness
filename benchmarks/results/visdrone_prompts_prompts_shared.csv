@@ -1,0 +1,3 @@
+tag,split,view,subset,n_images,n_objects,model,imgsz,sahi,prompts,cpu_ms_per_image_median,AP50,AP,AP_small,AP_medium,AP_large,AP_pedestrian,AP_car
+yoloe11s_land,val,shared,all,548,22908,yoloe-11s-seg.pt,1280,False,pedestrian=person|pedestrian|person walking;car=car,1724.0,0.4395,0.254,0.1503,0.4197,0.7688,0.1242,0.3838
+yoloe11m_land,val,shared,all,548,22908,yoloe-11m-seg.pt,1280,False,pedestrian=person|pedestrian|person walking;car=car,3356.6,0.4831,0.2851,0.1766,0.4532,0.7973,0.1392,0.4311

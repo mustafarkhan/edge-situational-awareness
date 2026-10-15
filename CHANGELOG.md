@@ -2,6 +2,8 @@
 
 ## v2.0.0 — 2026-10-15 — search planning, operator loop, TAK, text prompts, thermal
 
+- **Land and sea throughout:** search planning for a person on land at night (thermal, 91% get a box; a 25° lens at
+  120 m ≈ a 45° lens at 60 m, ~1 km²/h), text prompts measured on land too, TAK ground (a-u-G) vs sea (a-u-S) markers
 - **Search planning** from measured data: detection vs pixels on 4,221 unseen swimmers (84% get a box at IoU 0.3),
   measured look correlation on real clips, altitude-validated size model, sweep rate per altitude, QGroundControl
   mission export. 100 m searches ~5× more sea per hour than 20 m; ~1 frame/s is enough for coverage at 10 m/s

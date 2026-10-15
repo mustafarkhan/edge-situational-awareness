@@ -140,7 +140,7 @@ def route_frames(plan: dict, ex: dict, n: int):
 def thermal_compare(img: Path, coco_model, ft_model, labels: Path):
     """Same night frame: colour-trained model vs thermal-trained model (real detections)."""
     im, d = blank()
-    text_block(d, (60, 60), "At night: a thermal camera", font(52, "Bold"), width_chars=30)
+    text_block(d, (60, 60), "On land at night: thermal", font(52, "Bold"), width_chars=30)
     src = Image.open(img).convert("RGB")
     gts = []
     for line in labels.read_text().splitlines():
@@ -376,7 +376,7 @@ def main():
             ],
             "Can you just type “find a person”?",
             "Open-vocabulary detection, measured against small fine-tuned models on unseen test images.",
-            "The text-prompt model is 3× larger and needs ~10× the compute. Text search stays as a tool for things the "
+            "The text-prompt model is 3× larger and needs 10–14× the compute. Text search stays as a tool for things the "
             "trained model has no class for.",
         ),
         6.5,
@@ -385,7 +385,7 @@ def main():
     hold(
         text_card(
             "Open source. Every number measured, and checked in CI.",
-            "128 README numbers are tested against the results files on every push.\n\nNext: NVIDIA Jetson, "
+            "140 README numbers are tested against the results files on every push.\n\nNext: NVIDIA Jetson, "
             "measuring watts and joules at the frame rate a search really needs.",
             "CPU measurements so far. Research project on public data, not for operational rescue use.",
             "github.com/mustafarkhan/edge-situational-awareness",
