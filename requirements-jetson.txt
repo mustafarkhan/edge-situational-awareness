@@ -4,6 +4,8 @@ onnx
 onnxslim
 pycocotools>=2.0.7
 pandas
+tabulate
+lap                  # tracking
 pyyaml
 fastapi
 uvicorn[standard]

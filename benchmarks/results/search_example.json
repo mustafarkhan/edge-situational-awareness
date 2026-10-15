@@ -1,0 +1,17 @@
+{
+ "ceilings_m": {
+  "whole swimmer box (1.08 m, dataset median)": 251.0,
+  "head and shoulders (0.5 m)": 116.0,
+  "head only (0.3 m)": 69.0
+ },
+ "example": {
+  "case": "head and shoulders visible (0.5 m), 4 frames/s, 10 m/s",
+  "alt_m": 100,
+  "track_spacing_m": 75.8,
+  "tracks": 7,
+  "path_km": 7.45,
+  "flight_min": 12.4,
+  "pod": 0.8,
+  "area_km2": 0.5
+ }
+}

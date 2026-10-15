@@ -11,6 +11,10 @@ Subscribes (only with use_telemetry:=true; otherwise position and attitude are f
   are used. Any value older than telemetry_timeout_s means no coordinates are published (null), rather
   than coordinates computed from stale telemetry.
 
+Also subscribes to
+  alert_reviews std_msgs/String (JSON)     operator decisions from the ground station (web/backend/server.py);
+                                           a "reject" suppresses new alerts near that spot (esa.alerts)
+
 Publishes
   /detections  vision_msgs/Detection2DArray  (standard message type: other ROS tools understand it)
   /tracks_geo  std_msgs/String (JSON)        (detections + lat/lon, consumed by the web bridge)
@@ -56,6 +60,7 @@ class DetectorNode(Node):
         p("telemetry_timeout_s", 1.0)
         p("alert_labels", ["swimmer"])
         p("alert_min_frames", 5)
+        p("alert_dedupe_m", 3.0)  # same spot, new track ID -> not a new alert (benchmarks/alert_load.py)
         g = lambda n: self.get_parameter(n).value  # noqa: E731
 
         self.model = YOLO(g("model"), task="detect")
@@ -78,7 +83,8 @@ class DetectorNode(Node):
             sub(Float64, "heading", lambda m: self._tel(heading_deg=m.data), qos)
             sub(Float64, "gimbal_pitch", lambda m: self._tel(pitch_deg=m.data), qos)
             self._last_warn = 0.0
-        self.alerts = AlertManager(set(g("alert_labels")), g("alert_min_frames"))
+        self.alerts = AlertManager(set(g("alert_labels")), g("alert_min_frames"), dedupe_radius_m=g("alert_dedupe_m"))
+        self.create_subscription(String, "alert_reviews", self._on_review, 10)
         self.pub_det = self.create_publisher(Detection2DArray, "detections", 10)
         self.pub_geo = self.create_publisher(String, "tracks_geo", 10)
         # Alerts are latched (transient-local, last 10 kept): a ground station that connects or
@@ -89,6 +95,15 @@ class DetectorNode(Node):
         )
         self.pub_alert = self.create_publisher(String, "alerts", alert_qos)
         self.get_logger().info(f"model={g('model')} source={self.source}")
+
+    def _on_review(self, m: String):
+        try:
+            r = json.loads(m.data)
+        except json.JSONDecodeError:
+            return
+        if r.get("decision") == "reject":
+            self.alerts.reject(r.get("lat"), r.get("lon"), r.get("label", ""))
+            self.get_logger().info(f"operator rejected track {r.get('track_id')}: suppressing alerts near it")
 
     def _now(self) -> float:
         return self.get_clock().now().nanoseconds * 1e-9

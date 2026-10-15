@@ -45,6 +45,12 @@ def main():
     ap.add_argument("--alert", nargs="*", default=["swimmer"], help="labels that raise alerts")
     ap.add_argument("--alert-min-frames", type=int, default=5)
     ap.add_argument(
+        "--alert-dedupe-m",
+        type=float,
+        default=3.0,
+        help="no new alert within this distance of a recent one (0 = off); 3 m chosen in benchmarks/alert_load.py",
+    )
+    ap.add_argument(
         "--no-track",
         action="store_true",
         help="detection only. Use for frames that are not continuous video: ByteTrack only "
@@ -55,7 +61,7 @@ def main():
     source = int(args.source) if args.source.isdigit() else args.source
     model = YOLO(args.model, task="detect")
     cam = CameraGeo(args.lat, args.lon, args.alt, args.hfov, args.heading, args.pitch)
-    alerts = AlertManager(set(args.alert), args.alert_min_frames)
+    alerts = AlertManager(set(args.alert), args.alert_min_frames, dedupe_radius_m=args.alert_dedupe_m)
     telem = (
         [json.loads(l) for l in Path(args.telemetry).read_text().splitlines() if l.strip()] if args.telemetry else None
     )

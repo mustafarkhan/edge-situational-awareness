@@ -1,0 +1,11 @@
+# INT8 calibration images for TensorRT: 96 SeaDronesSee TRAINING images (CC0 1.0), resized to 1280 px.
+# Never calibrate on the images you evaluate on. Labels are not needed for calibration.
+path: .
+train: images
+val: images
+names:
+  0: swimmer
+  1: boat
+  2: jetski
+  3: life_saving_appliances
+  4: buoy
