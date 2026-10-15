@@ -36,8 +36,13 @@ declare -A TYPES=([detections]=vision_msgs/msg/Detection2DArray [tracks_geo]=std
 # --full-length: echo otherwise cuts strings at 128 characters, hiding the per-object coordinates.
 # /tracks_geo is recorded for the whole run (not just the first message): with live telemetry the first
 # frames may legitimately have no coordinates yet.
-timeout 300 ros2 topic echo --once --full-length /detections "${TYPES[detections]}" > "$OUT/detections.txt" 2>&1 &
-timeout 300 ros2 topic echo --full-length /tracks_geo "${TYPES[tracks_geo]}" > "$OUT/tracks_geo.txt" 2>&1 &
+# Explicit QoS: otherwise echo auto-detects it from the publishers it can see, and when a previous run's node is
+# still cached by the ROS daemon that lookup crashes (seen in CI on the second of three runs). A fresh daemon per
+# run removes the stale entry.
+ros2 daemon stop > /dev/null 2>&1 || true
+QOS=(--qos-reliability reliable --qos-durability volatile)
+timeout 300 ros2 topic echo --once --full-length "${QOS[@]}" /detections "${TYPES[detections]}" > "$OUT/detections.txt" 2>&1 &
+timeout 300 ros2 topic echo --full-length "${QOS[@]}" /tracks_geo "${TYPES[tracks_geo]}" > "$OUT/tracks_geo.txt" 2>&1 &
 # alerts are latched (transient local): subscribe with matching QoS, so alerts published before
 # this subscriber finished connecting are still delivered, as they would be to a late ground station
 timeout 300 ros2 topic echo --once --qos-durability transient_local --qos-reliability reliable \
