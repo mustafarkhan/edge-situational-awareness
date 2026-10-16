@@ -70,7 +70,10 @@ class DetectorNode(Node):
         p("alert_min_frames", 5)
         p("image_topic", "")  # non-empty: read frames from this sensor_msgs/Image topic instead of `source`
         p("camera_name", "rgb")  # tag on every message, for rigs with more than one camera (rgb, thermal)
-        p("camera_timeout_s", 2.0)  # no frame for this long -> status NO_CAMERA
+        p("camera_timeout_s", 2.0)
+        # wait (up to this long) for someone to subscribe to /detections and /tracks_geo before the first frame:
+        # for short recorded clips, where every frame matters (and for the CI test); 0 = start at once
+        p("wait_for_subscribers_s", 0.0)  # no frame for this long -> status NO_CAMERA
         p("alert_dedupe_m", 3.0)  # same spot, new track ID -> not a new alert (benchmarks/alert_load.py)
         g = lambda n: self.get_parameter(n).value  # noqa: E731
 
@@ -107,6 +110,7 @@ class DetectorNode(Node):
         self.pub_alert = self.create_publisher(String, "alerts", alert_qos)
         self.camera_name, self.camera_timeout_s = g("camera_name"), g("camera_timeout_s")
         self.image_topic = g("image_topic")
+        self.wait_for_subscribers_s = g("wait_for_subscribers_s")
         self._frame, self._frame_lock, self._frame_event = None, threading.Lock(), threading.Event()
         self.stats = {"frames": 0, "dropped": 0, "alerts": 0, "fps": 0.0, "last_frame": None}
         if self.image_topic:
@@ -197,6 +201,11 @@ class DetectorNode(Node):
         return cam
 
     def run(self):
+        deadline = time.monotonic() + self.wait_for_subscribers_s
+        while time.monotonic() < deadline and rclpy.ok():
+            if self.pub_det.get_subscription_count() and self.pub_geo.get_subscription_count():
+                break
+            time.sleep(0.1)
         kw = dict(persist=True, tracker=self.tracker, imgsz=self.imgsz, conf=self.conf, verbose=False)
         if self.image_topic:
             results = (self.model.track(f, **kw)[0] for f in self._frames_from_topic())

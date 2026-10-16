@@ -71,7 +71,7 @@ fi
 sleep 3
 "${RUN[@]}" ros2 run esa_ros detector_node --ros-args \
   -p model:="$MODEL" "${SOURCE[@]}" -p imgsz:=640 -p conf:=0.25 \
-  -p alert_labels:="['person']" -p alert_min_frames:=1 \
+  -p alert_labels:="['person']" -p alert_min_frames:=1 -p wait_for_subscribers_s:=20.0 \
   -p lat:=60.15 -p lon:=24.95 -p alt_m:=60.0 -p hfov_deg:=70.0 -p pitch_deg:="$PITCH" "${EXTRA[@]}" > "$OUT/node.log" 2>&1
 NODE_RC=$?
 [ "$IMAGE_TOPIC" = 1 ] && [ "$NODE_RC" = 124 ] && NODE_RC=0  # stopped by the timeout on purpose
