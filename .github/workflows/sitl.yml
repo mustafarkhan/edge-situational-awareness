@@ -16,6 +16,10 @@ defaults:
   run:
     shell: bash  # -eo pipefail: a failed flight must fail the step even when piped through grep
 
+defaults:
+  run:
+    shell: bash  # with pipefail: a failed flight must fail the step even though its output is filtered
+
 jobs:
   fly:
     runs-on: ubuntu-22.04
