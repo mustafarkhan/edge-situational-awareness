@@ -257,13 +257,18 @@ def test_lawnmower_covers_the_box_and_alternates_direction():
     assert path_length_m(pts) == pytest.approx(4 * 400 + 3 * 25, rel=1e-3)
 
 
-def test_qgc_plan_is_valid_mission_json():
+def test_qgc_plan_takes_off_searches_returns_and_is_fenced():
     pts = lawnmower(61.5, 23.7, 50, 100, 25)
-    plan = _json.loads(_json.dumps(qgc_plan(pts, 30.0, 8.0)))
+    plan = _json.loads(_json.dumps(qgc_plan(pts, 30.0, 8.0, fence_margin_m=50)))
     items = plan["mission"]["items"]
-    assert plan["fileType"] == "Plan" and items[0]["command"] == 178
-    assert [i["command"] for i in items[1:]] == [16] * len(pts)
-    assert items[1]["params"][4:] == [pts[0][0], pts[0][1], 30.0]
+    assert plan["fileType"] == "Plan"
+    assert [i["command"] for i in items] == [22, 178] + [16] * len(pts) + [20]  # takeoff, speed, search, RTL
+    assert items[2]["params"][4:] == [pts[0][0], pts[0][1], 30.0]
+    fence = plan["geoFence"]["polygons"][0]
+    assert fence["inclusion"] and len(fence["polygon"]) == 4
+    s_, w_ = fence["polygon"][0]
+    n_, e_ = fence["polygon"][2]
+    assert all(s_ < la < n_ and w_ < lo < e_ for la, lo in pts)  # every waypoint inside the fence
 
 
 # --- TAK / Cursor on Target and the operator loop ------------------------------------------------
