@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: "Install (light: no PyTorch needed for the unit tests)"
-        run: pip install ruff pytest numpy pandas pillow pyyaml pycocotools motmetrics fastapi httpx "uvicorn[standard]"
+        run: pip install ruff pytest numpy pandas pillow pyyaml pycocotools motmetrics fastapi httpx "uvicorn[standard]" && pip install -e .
       - name: Lint
         run: ruff check .
       - name: Format
