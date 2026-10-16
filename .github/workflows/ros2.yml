@@ -5,7 +5,7 @@ name: ROS 2
 on:
   push:
     branches: [main]
-    paths: ["ros2_ws/**", "src/esa/**", ".github/workflows/ros2.yml"]
+    paths: ["ros2_ws/**", "src/esa/**", "tools/fly_mission.py", ".github/workflows/ros2.yml"]
   workflow_dispatch:
 
 jobs:
@@ -36,3 +36,10 @@ jobs:
         run: PITCH=45.0 bash ros2_ws/test_node.sh
       - name: Run the node and check its topics (live telemetry topics, as from MAVROS)
         run: TELEMETRY=1 bash ros2_ws/test_node.sh
+      - name: Run the node and check its topics (camera frames from a sensor_msgs/Image topic)
+        run: IMAGE_TOPIC=1 bash ros2_ws/test_node.sh
+      - name: Launch files parse (single camera; RGB + thermal with recording)
+        run: |
+          source /opt/ros/humble/setup.bash && source ros2_ws/install/setup.bash
+          ros2 launch esa_ros esa.launch.py --show-args > /dev/null
+          ros2 launch esa_ros esa_dual.launch.py --show-args | grep -q thermal_model
