@@ -11,6 +11,9 @@ PLAN=${1:-samples/search_example.plan}
 REPORT=${2:-sitl_report.json}
 ARDUCOPTER=${ARDUCOPTER:-arducopter}
 ARDUPILOT=${ARDUPILOT:-}
+# the simulator runs in a scratch directory: make relative paths absolute first
+[[ "$ARDUCOPTER" == */* ]] && ARDUCOPTER=$(realpath "$ARDUCOPTER")
+[ -n "$ARDUPILOT" ] && ARDUPILOT=$(realpath "$ARDUPILOT")
 SPEEDUP=${SPEEDUP:-10}
 if python3 -c "import socket; socket.create_connection(('127.0.0.1', 5760), 1)" 2>/dev/null; then
   echo "something is already listening on port 5760 (another simulator?): stop it first" >&2; exit 2
@@ -23,5 +26,6 @@ DEFAULTS=()
 SITL=$!
 trap 'kill $SITL 2>/dev/null || true' EXIT
 sleep 5
+kill -0 $SITL 2>/dev/null || { echo "simulator did not start:" >&2; cat "$WORK/sitl.log" >&2; exit 3; }
 python3 -u tools/fly_mission.py --connect tcp:127.0.0.1:5760 --plan "$PLAN" --sitl --fly --timeout "${TIMEOUT:-1200}" \
   --report "$REPORT"
