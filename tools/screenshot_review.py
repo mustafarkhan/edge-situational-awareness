@@ -11,8 +11,11 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
+
+from esa.access import new_token
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -25,12 +28,13 @@ def main():
     ap.add_argument("--zoom", default="17.9")
     ap.add_argument("--video", default=None, help="also record the session to this .webm/.mp4 (for the demo video)")
     a = ap.parse_args()
-    reviews = Path("/tmp/esa_reviews.jsonl")
+    reviews = Path(tempfile.gettempdir()) / "esa_reviews.jsonl"
+    token = new_token()
     reviews.unlink(missing_ok=True)
     procs = [
         subprocess.Popen(
             [sys.executable, str(REPO / "web/backend/server.py"), "--replay", a.replay, "--rate", "15", "--once"]
-            + ["--port", "8000", "--reviews", str(reviews)],
+            + ["--port", "8000", "--reviews", str(reviews), "--token", token],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         ),
@@ -50,7 +54,7 @@ def main():
             vid_dir = Path(a.out).parent / "_rec"
             ctx = b.new_context(viewport=vp, record_video_dir=str(vid_dir), record_video_size=vp) if a.video else b
             page = ctx.new_page() if a.video else b.new_page(viewport=vp)
-            page.goto(f"http://localhost:5173/?offline=1&center={a.center}&zoom={a.zoom}")
+            page.goto(f"http://localhost:5173/?offline=1&center={a.center}&zoom={a.zoom}#token={token}")
             page.wait_for_selector("button.reject", timeout=60_000)
             page.wait_for_timeout(1500)  # let a second alert arrive
             page.locator("button.reject").first.click()

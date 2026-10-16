@@ -2,6 +2,12 @@
 
 ## v3.0.0-dev — towards field tests on real drones
 
+- **Ground-station security (audit S-1, S-2, S-9):** every WebSocket client authenticates with an operator token
+  before receiving anything; browser origins are checked; the server listens locally unless told otherwise and
+  serves TLS when given a certificate; decisions are attributed server-side and kept in a hash-chained audit log;
+  review messages validated, rate-limited and size-capped; alert memory bounded; `/health` no longer shows the
+  TAK endpoint. Map app: popups built from text, MapLibre GL 6.14 (fixes GHSA-jrc7-96c5-q579), a
+  Content-Security-Policy, and a browser test in CI that runs the built app against a script-carrying label
 - **Flight-ready missions:** `.plan` files now take off, set speed, search, return to launch, with an inclusion
   geofence 50 m around the search box
 - **`tools/fly_mission.py`:** MAVLink mission + geofence upload to PX4/ArduPilot; arms and flies only in a simulator

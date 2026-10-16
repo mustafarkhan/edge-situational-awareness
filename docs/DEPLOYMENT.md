@@ -66,6 +66,21 @@ ros2 launch esa_ros esa_dual.launch.py \
 Gimbal pitch has no standard ROS topic: publish it on `/gimbal_pitch` (degrees below the horizon, 90 = straight
 down) from the gimbal's SDK, or fly with the camera locked straight down and leave `pitch_deg:=90`.
 
+Ground station, for a field team on a shared network:
+
+```bash
+# one line per operator: '<name> <token>'; generate tokens with: python -c "from esa.access import new_token; print(new_token())"
+python web/backend/server.py --ros --operators ops.txt --host 0.0.0.0 \
+    --ssl-certfile gcs.crt --ssl-keyfile gcs.key --allow-origin https://gcs.local:5173 --tak udp://239.2.3.1:6969
+```
+
+Each operator opens the map with their own link (`https://gcs.local:5173/#token=<their token>`); their decisions are
+logged under their name in `outputs/reviews.jsonl`. Check the log with
+`python -c "from esa.access import AuditLog; print(AuditLog.verify('outputs/reviews.jsonl'))"`. Treat the token file
+like a password list: keep it off shared drives and out of git. Known gaps (audit, fix plan steps 3 and 5): ROS 2
+traffic and TAK output are not yet encrypted, so keep ROS on the drone (`ROS_LOCALHOST_ONLY=1`) and the TAK network
+closed.
+
 ## 3. Rules (EU, Finland) — check before every campaign
 
 This is a checklist, not legal advice; the university's drone operations lead and the national authority decide.
@@ -140,5 +155,6 @@ casualty, and are never flown over at low altitude. At sea, a safety boat stays 
 | detector node runs on real images; topics published; coordinates correct straight down, tilted, from live telemetry and from an Image topic | `ros2_ws/test_node.sh` | yes |
 | mission upload (mission + geofence) and a full simulated flight of the search plan | `tools/fly_mission.py` against ArduPilot SITL | yes |
 | ground station ↔ TAK server | `tests/tak_e2e.py` | yes |
+| map app in a real browser: token required, labels never run as script, no CSP violations, reviews attributed | `tests/browser_e2e.py` | yes |
 | the README's numbers still match the result files | `benchmarks/check_readme.py` | yes |
 | the Jetson's frame rate and accuracy after TensorRT conversion | `benchmarks/run_on_jetson.sh` | no (needs the board) |

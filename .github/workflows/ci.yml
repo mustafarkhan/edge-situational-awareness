@@ -15,13 +15,14 @@ jobs:
         with:
           python-version: "3.11"
       - name: "Install (light: no PyTorch needed for the unit tests)"
-        run: pip install ruff pytest numpy pandas pillow pyyaml pycocotools motmetrics
+        run: pip install ruff pytest numpy pandas pillow pyyaml pycocotools motmetrics fastapi httpx "uvicorn[standard]" && pip install -e .
       - name: Lint
         run: ruff check .
       - name: Format
         run: ruff format --check .
-      - name: Unit tests
-        run: pytest -q
+      - name: Unit tests (none may be skipped)
+        shell: bash  # -eo pipefail: a failing test must fail the step even through tee
+        run: pytest -q -rs | tee pytest.log && ! grep -q "SKIPPED" pytest.log
       - name: README numbers match the results files
         run: python benchmarks/check_readme.py
 
@@ -83,3 +84,26 @@ jobs:
           cache-dependency-path: web/frontend/package-lock.json
       - run: npm ci
       - run: npx vite build
+
+  browser:
+    name: Operator map in a real browser (auth, XSS, CSP)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/frontend/package-lock.json
+      - name: Install the server and a headless browser
+        run: |
+          pip install fastapi "uvicorn[standard]" playwright && pip install -e .
+          python -m playwright install --with-deps chromium
+      - name: Build the map app
+        working-directory: web/frontend
+        run: npm ci && npx vite build
+      - name: Token required, labels never run as script, no CSP violations, reviews attributed
+        run: python tests/browser_e2e.py
