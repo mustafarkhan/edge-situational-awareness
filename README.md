@@ -61,8 +61,8 @@ python tools/detect_video.py --model models/sds_y11n_ep4.pt --source samples/sea
   --alert swimmer --alert-min-frames 15 --out outputs/my_run.jsonl --save-video outputs/my_run.mp4
 
 # watch it on the map: replay your run, or the full recorded 5-second flight in web/sample/
-python web/backend/server.py --replay web/sample/sea_DJI_0055.jsonl --rate 15
-cd web/frontend && npm install && npm run dev     # open http://localhost:5173/?offline=1
+python web/backend/server.py --replay web/sample/sea_DJI_0055.jsonl --rate 15   # prints an operator link
+cd web/frontend && npm install && npm run dev     # open that link (add ?offline=1 before the # without internet)
 ```
 
 Model details: [model card](docs/MODEL_CARD_sds_y11n_ep4.md). On a drone, the same pipeline runs as a ROS 2 node fed by
@@ -407,8 +407,16 @@ operator confirms it). The drone itself is sent at 1 Hz, and a rejected alert de
 (ATAK mesh `239.2.3.1:6969`) or TCP to a TAK server:
 `python web/backend/server.py --replay web/sample/sea_DJI_0055.jsonl --tak udp://239.2.3.1:6969`.
 CI runs this end to end against a real open-source TAK server (taky): a TAK client receives the drone, the swimmer
-alert and the delete after an operator rejects it ([`tests/tak_e2e.py`](tests/tak_e2e.py)). TLS (port 8089) is not
-implemented.
+alert and the delete after an operator rejects it ([`tests/tak_e2e.py`](tests/tak_e2e.py)). TLS to TAK (port 8089)
+is not implemented yet.
+
+**Who may connect.** The ground station only talks to operators who hold a token: every WebSocket client must
+authenticate first, browsers may only connect from allowed origins, and each decision is logged under the operator
+the token belongs to, in a hash-chained audit log that shows any later edit ([`src/esa/access.py`](src/esa/access.py)).
+It listens on the local machine unless told otherwise, and serves `wss://` with `--ssl-certfile`/`--ssl-keyfile`.
+The map app builds popups from plain text and ships a Content-Security-Policy. A browser test in CI checks all of
+this on the built app, including that a detection label carrying script is shown as text and never runs
+([`tests/browser_e2e.py`](tests/browser_e2e.py)).
 
 ## 12. Text-prompt search: "find a person", at sea and on land (v2)
 
@@ -558,7 +566,7 @@ so a ground station that joins or reconnects still receives recent alerts.
 ## Reproduce
 
 ```bash
-pip install -r requirements-train.txt && pip install -e . && pytest -q        # 19 tests, also run in CI
+pip install -r requirements-train.txt && pip install -e . && pytest -q        # unit tests, also run in CI
 
 # data: VisDrone2019-DET train + val
 python data/convert_visdrone.py --src /path/to/visdrone --out datasets/visdrone_yolo
@@ -582,8 +590,8 @@ HIT=/path/to/HIT-UAV bash scripts/thermal_experiments.sh               # thermal
 python tests/tak_e2e.py --taky /path/to/taky                            # TAK end to end
 
 # map app (laptop, no ROS)
-python web/backend/server.py --replay outputs/track_slow_botsort.jsonl
-cd web/frontend && npm install && npm run dev          # open with ?offline=1 if there's no internet
+python web/backend/server.py --replay outputs/track_slow_botsort.jsonl   # prints an operator link with its token
+cd web/frontend && npm install && npm run dev          # open that link; ?offline=1 if there's no internet
 ```
 
 Proper GPU training (80-120 epochs instead of 3-5) on a free Kaggle GPU, one notebook: [docs/KAGGLE.md](docs/KAGGLE.md).

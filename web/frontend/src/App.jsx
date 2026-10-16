@@ -1,7 +1,39 @@
 import { useEffect, useRef, useState } from "react";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
+import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 
-const WS_URL = import.meta.env.VITE_WS_URL ?? `ws://${location.hostname}:8000/ws`;
+// MapLibre 6 runs its map worker from a separate file; this makes Vite ship it with the app.
+maplibregl.setWorkerUrl(workerUrl);
+
+const WS_URL = import.meta.env.VITE_WS_URL ??
+  `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:8000/ws`;
+
+// The operator token arrives in the link's #fragment (never sent to any web server), is kept for this tab only,
+// and is sent as the first WebSocket message. The server prints the link when it starts.
+function operatorToken() {
+  const fromLink = new URLSearchParams(location.hash.slice(1)).get("token");
+  try {
+    if (fromLink) {
+      sessionStorage.setItem("esa-token", fromLink);
+      history.replaceState(null, "", location.pathname + location.search); // keep it out of the address bar
+    }
+    return fromLink ?? sessionStorage.getItem("esa-token");
+  } catch {
+    return fromLink;
+  }
+}
+const TOKEN = operatorToken();
+
+// Popup content built from text nodes: detection labels can come from free-text prompts or files,
+// so they are never interpreted as HTML.
+function popupContent(p) {
+  const div = document.createElement("div");
+  const b = document.createElement("b");
+  b.textContent = String(p.label ?? "");
+  div.append(b, document.createElement("br"), `track ${p.track_id ?? "–"}`,
+    document.createElement("br"), `conf ${p.conf ?? "–"}`);
+  return div;
+}
 const TRAIL = 30; // positions kept per track
 
 // OpenStreetMap raster tiles: fine for development and a demo video.
@@ -59,7 +91,8 @@ export default function App() {
   const dronePath = useRef([]);
   const seenTracks = useRef(new Set());
   const [uniqueTracks, setUniqueTracks] = useState(0);
-  const [status, setStatus] = useState("connecting…");
+  const [status, setStatus] = useState(TOKEN ? "connecting…" : "no operator token: open the link the server printed");
+  const [operator, setOperator] = useState(null);
   const [frame, setFrame] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [reviews, setReviews] = useState({}); // track_id -> "confirm" | "reject", shared by all operators
@@ -87,8 +120,7 @@ export default function App() {
         paint: { "circle-radius": 9, "circle-color": "#111", "circle-stroke-color": "#ffd600", "circle-stroke-width": 3 } });
       m.on("click", "dets", (e) => {
         const p = e.features[0].properties;
-        new maplibregl.Popup().setLngLat(e.lngLat)
-          .setHTML(`<b>${p.label}</b><br/>track ${p.track_id}<br/>conf ${p.conf}`).addTo(m);
+        new maplibregl.Popup().setLngLat(e.lngLat).setDOMContent(popupContent(p)).addTo(m);
       });
     });
     map.current = m;
@@ -96,14 +128,20 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!TOKEN) return undefined;
     let ws, retry;
     const connect = () => {
       ws = new WebSocket(WS_URL);
       wsRef.current = ws;
-      ws.onopen = () => setStatus("live");
-      ws.onclose = () => { setStatus("disconnected – retrying"); retry = setTimeout(connect, 2000); };
+      ws.onopen = () => ws.send(JSON.stringify({ type: "auth", token: TOKEN }));
+      ws.onclose = (ev) => {
+        if (ev.code === 1008) { setStatus("not authorised: check the operator link"); return; } // no retry loop
+        setStatus("disconnected – retrying"); retry = setTimeout(connect, 2000);
+      };
       ws.onmessage = (ev) => {
-        const msg = JSON.parse(ev.data);
+        let msg;
+        try { msg = JSON.parse(ev.data); } catch { return; }
+        if (msg.type === "hello") { setOperator(msg.operator); setStatus("live"); return; }
         if (msg.type === "review") {  // a decision by this or another operator
           setReviews((r) => ({ ...r, [msg.track_id]: msg.decision }));
           return;
@@ -168,7 +206,7 @@ export default function App() {
       <div ref={mapDiv} className="map" />
       <aside className="panel">
         <h1>Situational awareness</h1>
-        <p className={`status ${status === "live" ? "ok" : ""}`}>● {status}</p>
+        <p className={`status ${status === "live" ? "ok" : ""}`}>● {status}{operator && status === "live" ? ` · ${operator}` : ""}</p>
         {frame && <p>Frame {frame.frame} · {frame.fps} FPS · {uniqueTracks} track IDs so far</p>}
         <h2>In view</h2>
         {Object.keys(counts).length ? (

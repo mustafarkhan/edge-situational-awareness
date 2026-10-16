@@ -17,6 +17,8 @@ import tempfile
 import time
 from pathlib import Path
 
+from esa.access import new_token
+
 REPO = Path(__file__).resolve().parents[1]
 
 
@@ -32,6 +34,7 @@ def main():
     ap.add_argument("--height", type=int, default=900)
     args = ap.parse_args()
 
+    token = new_token()
     dist = REPO / "web" / "frontend" / "dist"
     if not dist.exists():
         sys.exit("build the frontend first: cd web/frontend && npm install && npx vite build")
@@ -46,6 +49,8 @@ def main():
             "--port",
             "8000",
             "--once",
+            "--token",
+            token,
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -79,7 +84,7 @@ def main():
                 url += f"&center={args.center}"
             if args.zoom:
                 url += f"&zoom={args.zoom}"
-            page.goto(url)
+            page.goto(url + f"#token={token}")
             page.wait_for_timeout(int(args.seconds * 1000))
             page.screenshot(path=str(Path(args.out).with_suffix(".png")))
             ctx.close()

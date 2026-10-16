@@ -17,6 +17,7 @@ import asyncio
 import json
 import os
 import re
+import secrets
 import socket
 import subprocess
 import sys
@@ -26,6 +27,7 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
+TOKEN = secrets.token_urlsafe(24)
 
 
 def wait_port(port: int, timeout=30.0):
@@ -65,6 +67,9 @@ async def operator(port: int, log: list[dict]):
     import websockets
 
     async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
+        await ws.send(json.dumps({"type": "auth", "token": TOKEN}))
+        hello = json.loads(await asyncio.wait_for(ws.recv(), 10))
+        assert hello == {"type": "hello", "operator": "operator"}, hello
         t0 = time.time()
         while time.time() - t0 < 60:
             msg = json.loads(await asyncio.wait_for(ws.recv(), 30))
@@ -93,7 +98,8 @@ def main():
         reviews = work / "reviews.jsonl"
         server = subprocess.Popen(
             [sys.executable, str(REPO / "web/backend/server.py"), "--replay", str(REPO / "web/sample/sea_DJI_0055.jsonl"),
-             "--rate", "30", "--once", "--port", "8765", "--tak", "tcp://127.0.0.1:8087", "--reviews", str(reviews)],
+             "--rate", "30", "--once", "--port", "8765", "--tak", "tcp://127.0.0.1:8087", "--reviews", str(reviews),
+             "--token", TOKEN],
             env={**os.environ, "PYTHONUNBUFFERED": "1"},
         )  # fmt: skip
         wait_port(8765)

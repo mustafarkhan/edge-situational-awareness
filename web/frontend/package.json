@@ -3,9 +3,13 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "scripts": { "dev": "vite", "build": "vite build", "preview": "vite preview" },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
   "dependencies": {
-    "maplibre-gl": "^4.7.1",
+    "maplibre-gl": "^6.14.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
