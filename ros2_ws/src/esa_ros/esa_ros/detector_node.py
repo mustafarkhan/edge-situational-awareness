@@ -15,7 +15,14 @@ Also subscribes to
   alert_reviews std_msgs/String (JSON)     operator decisions from the ground station (web/backend/server.py);
                                            a "reject" suppresses new alerts near that spot (esa.alerts)
 
+Camera input: `source` (device index, file, RTSP/UDP URL) or, when `image_topic` is set, a sensor_msgs/Image
+topic (a ROS camera driver, a gimbal SDK bridge, a rosbag replay). From a topic only the NEWEST frame is processed:
+frames that arrive while the model is busy are dropped and counted, so latency never builds up.
+
 Publishes
+  /status      std_msgs/String (JSON, 1 Hz)  health: OK / DEGRADED (no coordinates) / NO_CAMERA, fps, dropped
+                                             frames, telemetry problems, alerts so far. For the ground station
+                                             and the flight log; the autopilot never depends on it.
   /detections  vision_msgs/Detection2DArray  (standard message type: other ROS tools understand it)
   /tracks_geo  std_msgs/String (JSON)        (detections + lat/lon, consumed by the web bridge)
   /alerts      std_msgs/String (JSON)
@@ -27,11 +34,12 @@ import json
 import threading
 import time
 
+import numpy as np
 import rclpy
 from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
-from sensor_msgs.msg import NavSatFix
+from sensor_msgs.msg import Image, NavSatFix
 from std_msgs.msg import Float64, String
 from ultralytics import YOLO
 from vision_msgs.msg import Detection2D, Detection2DArray, ObjectHypothesisWithPose
@@ -60,6 +68,9 @@ class DetectorNode(Node):
         p("telemetry_timeout_s", 1.0)
         p("alert_labels", ["swimmer"])
         p("alert_min_frames", 5)
+        p("image_topic", "")  # non-empty: read frames from this sensor_msgs/Image topic instead of `source`
+        p("camera_name", "rgb")  # tag on every message, for rigs with more than one camera (rgb, thermal)
+        p("camera_timeout_s", 2.0)  # no frame for this long -> status NO_CAMERA
         p("alert_dedupe_m", 3.0)  # same spot, new track ID -> not a new alert (benchmarks/alert_load.py)
         g = lambda n: self.get_parameter(n).value  # noqa: E731
 
@@ -94,7 +105,16 @@ class DetectorNode(Node):
             depth=10, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.TRANSIENT_LOCAL
         )
         self.pub_alert = self.create_publisher(String, "alerts", alert_qos)
-        self.get_logger().info(f"model={g('model')} source={self.source}")
+        self.camera_name, self.camera_timeout_s = g("camera_name"), g("camera_timeout_s")
+        self.image_topic = g("image_topic")
+        self._frame, self._frame_lock, self._frame_event = None, threading.Lock(), threading.Event()
+        self.stats = {"frames": 0, "dropped": 0, "alerts": 0, "fps": 0.0, "last_frame": None}
+        if self.image_topic:
+            self.create_subscription(Image, self.image_topic, self._on_image, qos_profile_sensor_data)
+        self.pub_status = self.create_publisher(String, "status", 10)
+        self.create_timer(1.0, self._publish_status)
+        src = f"topic {self.image_topic}" if self.image_topic else self.source
+        self.get_logger().info(f"camera={self.camera_name} model={g('model')} source={src}")
 
     def _on_review(self, m: String):
         try:
@@ -104,6 +124,56 @@ class DetectorNode(Node):
         if r.get("decision") == "reject":
             self.alerts.reject(r.get("lat"), r.get("lon"), r.get("label", ""))
             self.get_logger().info(f"operator rejected track {r.get('track_id')}: suppressing alerts near it")
+
+    def _on_image(self, m: Image):
+        frame = image_to_bgr(m)
+        if frame is None:
+            self.get_logger().warn(f"unsupported image encoding {m.encoding!r}", throttle_duration_sec=10)
+            return
+        with self._frame_lock:
+            if self._frame is not None:
+                self.stats["dropped"] += 1  # the model had not taken the previous frame yet
+            self._frame = frame
+        self._frame_event.set()
+
+    def _frames_from_topic(self):
+        while rclpy.ok():
+            if not self._frame_event.wait(timeout=0.5):
+                continue
+            with self._frame_lock:
+                frame, self._frame = self._frame, None
+                self._frame_event.clear()
+            if frame is not None:
+                yield frame
+
+    def status(self) -> dict:
+        now = time.monotonic()
+        last = self.stats["last_frame"]
+        problems = []
+        if last is None or now - last > self.camera_timeout_s:
+            state = "NO_CAMERA"
+            problems.append("no camera frames" if last is None else f"no frame for {now - last:.1f} s")
+        else:
+            state = "OK"
+        if self.telemetry is not None:
+            tel = self.telemetry.problems(self._now())
+            if tel:
+                problems += tel
+                state = "DEGRADED" if state == "OK" else state
+        return {
+            "camera": self.camera_name,
+            "state": state,
+            "problems": problems,
+            "fps": self.stats["fps"],
+            "frames": self.stats["frames"],
+            "dropped_frames": self.stats["dropped"],
+            "alerts": self.stats["alerts"],
+            "telemetry": "live" if self.telemetry is not None else "fixed parameters",
+            "t": time.time(),
+        }
+
+    def _publish_status(self):
+        self.pub_status.publish(String(data=json.dumps(self.status())))
 
     def _now(self) -> float:
         return self.get_clock().now().nanoseconds * 1e-9
@@ -127,23 +197,19 @@ class DetectorNode(Node):
         return cam
 
     def run(self):
+        kw = dict(persist=True, tracker=self.tracker, imgsz=self.imgsz, conf=self.conf, verbose=False)
+        if self.image_topic:
+            results = (self.model.track(f, **kw)[0] for f in self._frames_from_topic())
+        else:
+            results = self.model.track(self.source, stream=True, **kw)
         t_prev = time.perf_counter()
-        for i, r in enumerate(
-            self.model.track(
-                self.source,
-                stream=True,
-                persist=True,
-                tracker=self.tracker,
-                imgsz=self.imgsz,
-                conf=self.conf,
-                verbose=False,
-            )
-        ):
+        for i, r in enumerate(results):
             if not rclpy.ok():
                 break
             now = time.perf_counter()
             fps = 1.0 / max(now - t_prev, 1e-6)
             t_prev = now
+            self.stats.update(frames=i + 1, fps=round(fps, 1), last_frame=time.monotonic())
             stamp = self.get_clock().now().to_msg()
             h, w = r.orig_shape
             ids = r.boxes.id.int().tolist() if r.boxes.id is not None else [None] * len(r.boxes)
@@ -187,6 +253,7 @@ class DetectorNode(Node):
                     data=json.dumps(
                         {
                             "frame": i,
+                            "camera": self.camera_name,
                             "t": time.time(),
                             "fps": round(fps, 1),
                             "drone": (
@@ -206,9 +273,33 @@ class DetectorNode(Node):
                     )
                 )
             )
+            self.stats["alerts"] += len(new_alerts)
             for a in new_alerts:
+                a["camera"] = self.camera_name
                 self.pub_alert.publish(String(data=json.dumps(a)))
                 self.get_logger().warn(a["message"])
+
+
+def image_to_bgr(m: Image):
+    """sensor_msgs/Image -> HxWx3 uint8 BGR array without cv_bridge (one dependency fewer on the Jetson).
+
+    Thermal cameras often publish 16-bit counts (mono16): those are stretched per frame to 8 bits, the same
+    contrast stretch as the HIT-UAV images the thermal model was trained on.
+    """
+    enc = m.encoding.lower()
+    buf = np.frombuffer(m.data, dtype=np.uint16 if enc in ("mono16", "16uc1") else np.uint8)
+    if enc in ("bgr8", "rgb8"):
+        a = buf.reshape(m.height, m.step)[:, : m.width * 3].reshape(m.height, m.width, 3)
+        return a[:, :, ::-1].copy() if enc == "rgb8" else a.copy()
+    if enc in ("mono8", "8uc1"):
+        a = buf.reshape(m.height, m.step)[:, : m.width]
+    elif enc in ("mono16", "16uc1"):
+        a = buf.reshape(m.height, m.step // 2)[:, : m.width].astype(np.float32)
+        lo, hi = np.percentile(a, (1, 99))
+        a = np.clip((a - lo) * 255.0 / max(hi - lo, 1.0), 0, 255).astype(np.uint8)
+    else:
+        return None
+    return np.repeat(a[:, :, None], 3, axis=2)
 
 
 def main():

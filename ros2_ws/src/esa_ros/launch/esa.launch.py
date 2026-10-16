@@ -1,6 +1,9 @@
 """Detector node with live telemetry from MAVROS (PX4 / ArduPilot).
 
   ros2 launch esa_ros esa.launch.py model:=weights/sds_y11n_ep4.pt source:=0 use_telemetry:=true
+  ros2 launch esa_ros esa.launch.py image_topic:=/camera/image_raw use_telemetry:=true   # ROS camera driver
+
+For an RGB + thermal gimbal see esa_dual.launch.py.
 
 MAVROS gives position, height above home and compass heading directly (remapped below). Gimbal pitch
 has no single standard topic: publish it on /gimbal_pitch as std_msgs/Float64 in degrees BELOW the
@@ -23,6 +26,8 @@ def generate_launch_description():
             DeclareLaunchArgument("use_telemetry", default_value="false"),
             DeclareLaunchArgument("pitch_deg", default_value="90.0"),
             DeclareLaunchArgument("hfov_deg", default_value="70.0"),
+            DeclareLaunchArgument("image_topic", default_value=""),
+            DeclareLaunchArgument("camera_name", default_value="rgb"),
             Node(
                 package="esa_ros",
                 executable="detector_node",
@@ -32,6 +37,8 @@ def generate_launch_description():
                     {
                         "model": arg("model"),
                         "source": arg("source"),
+                        "image_topic": arg("image_topic"),
+                        "camera_name": arg("camera_name"),
                         "imgsz": 1280,
                         "conf": 0.25,
                         "alert_labels": ["swimmer"],

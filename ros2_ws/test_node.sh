@@ -12,6 +12,9 @@ PITCH=${PITCH:-90.0}  # gimbal pitch below the horizon: 90 = straight down; e.g.
 # TELEMETRY=1: position, altitude and gimbal come from live topics (as from MAVROS) instead of parameters.
 # The fake drone is put over Tampere (61.4978 N) so coordinates can only come from the topics.
 TELEMETRY=${TELEMETRY:-0}
+# IMAGE_TOPIC=1: frames arrive as sensor_msgs/Image on /camera/image_raw (as from a ROS camera driver) at 10 Hz,
+# faster than the CPU model runs, so the node must drop stale frames rather than queue them.
+IMAGE_TOPIC=${IMAGE_TOPIC:-0}
 if [ "$TELEMETRY" = 1 ]; then LAT_RE='"lat": 61\.49[0-9]{5}'; MODE="live telemetry"; else LAT_RE='"lat": 60\.1[45][0-9]{4}'; MODE="pitch $PITCH"; fi
 mkdir -p "$OUT/frames"
 for img in bus zidane; do  # Ultralytics' standard sample images (people + vehicles)
@@ -32,7 +35,7 @@ annotate() {  # level title file: one annotation with the file's first 60 lines
 
 # Message types are given explicitly: without them, `ros2 topic echo` exits at once if the topic
 # does not exist yet, and these subscribers start before the node.
-declare -A TYPES=([detections]=vision_msgs/msg/Detection2DArray [tracks_geo]=std_msgs/msg/String [alerts]=std_msgs/msg/String)
+declare -A TYPES=([detections]=vision_msgs/msg/Detection2DArray [tracks_geo]=std_msgs/msg/String [alerts]=std_msgs/msg/String [status]=std_msgs/msg/String)
 # --full-length: echo otherwise cuts strings at 128 characters, hiding the per-object coordinates.
 # /tracks_geo is recorded for the whole run (not just the first message): with live telemetry the first
 # frames may legitimately have no coordinates yet.
@@ -47,7 +50,17 @@ timeout 300 ros2 topic echo --full-length "${QOS[@]}" /tracks_geo "${TYPES[track
 # this subscriber finished connecting are still delivered, as they would be to a late ground station
 timeout 300 ros2 topic echo --once --qos-durability transient_local --qos-reliability reliable \
   /alerts std_msgs/msg/String > "$OUT/alerts.txt" 2>&1 &
+timeout 300 ros2 topic echo --full-length "${QOS[@]}" /status "${TYPES[status]}" > "$OUT/status.txt" 2>&1 &
 EXTRA=()
+SOURCE=(-p source:="$OUT/frames")
+RUN=(timeout 300)
+if [ "$IMAGE_TOPIC" = 1 ]; then
+  MODE="$MODE, image topic"
+  timeout 300 python3 "$(dirname "$0")/pub_frames.py" "$OUT/frames" --topic /camera/image_raw --hz 10 --seconds 300 \
+    > "$OUT/pub.log" 2>&1 &
+  SOURCE=(-p image_topic:=/camera/image_raw)
+  RUN=(timeout -s INT 60)  # a camera topic never ends: stop the node after 60 s, as Ctrl-C would
+fi
 if [ "$TELEMETRY" = 1 ]; then
   timeout 300 ros2 topic pub -r 10 /fix sensor_msgs/msg/NavSatFix \
     "{latitude: 61.4978, longitude: 23.761, altitude: 120.0, status: {status: 0}}" > /dev/null 2>&1 &
@@ -56,11 +69,12 @@ if [ "$TELEMETRY" = 1 ]; then
   EXTRA=(-p use_telemetry:=true)
 fi
 sleep 3
-timeout 300 ros2 run esa_ros detector_node --ros-args \
-  -p model:="$MODEL" -p source:="$OUT/frames" -p imgsz:=640 -p conf:=0.25 \
+"${RUN[@]}" ros2 run esa_ros detector_node --ros-args \
+  -p model:="$MODEL" "${SOURCE[@]}" -p imgsz:=640 -p conf:=0.25 \
   -p alert_labels:="['person']" -p alert_min_frames:=1 \
   -p lat:=60.15 -p lon:=24.95 -p alt_m:=60.0 -p hfov_deg:=70.0 -p pitch_deg:="$PITCH" "${EXTRA[@]}" > "$OUT/node.log" 2>&1
 NODE_RC=$?
+[ "$IMAGE_TOPIC" = 1 ] && [ "$NODE_RC" = 124 ] && NODE_RC=0  # stopped by the timeout on purpose
 echo "node exit code: $NODE_RC"
 sleep 2
 for job in $(jobs -p); do kill "$job" 2>/dev/null; done
@@ -68,7 +82,7 @@ wait 2>/dev/null
 
 tail -n 40 "$OUT/node.log" > "$OUT/node_tail.log"
 fail=0
-for t in detections tracks_geo alerts; do
+for t in detections tracks_geo alerts status; do
   if grep -qE "detections:|data:" "$OUT/$t.txt"; then
     echo "OK   /$t"; annotate notice "/$t received" "$OUT/$t.txt"
   else
@@ -84,6 +98,14 @@ if grep -qE "$LAT_RE" "$OUT/tracks_geo.txt"; then
 else
   echo "FAIL /tracks_geo has no geolocated objects ($MODE)"
   annotate error "no geolocated objects ($MODE)" "$OUT/tracks_geo.txt"; fail=1
+fi
+# health topic: must report a camera state; with frames streaming the camera must be OK
+if grep -qE 'state\\?": \\?"(OK|DEGRADED)' "$OUT/status.txt"; then
+  echo "OK   /status reports the camera as working"
+  grep -E 'state\\?": \\?"(OK|DEGRADED)' "$OUT/status.txt" | tail -n 1 > "$OUT/status_sample.txt"
+  annotate notice "/status ($MODE)" "$OUT/status_sample.txt"
+else
+  echo "FAIL /status never reported a working camera"; annotate error "/status ($MODE)" "$OUT/status.txt"; fail=1
 fi
 if [ "$NODE_RC" != 0 ] || grep -q "terminate called\|Aborted" "$OUT/node.log"; then
   echo "FAIL node did not exit cleanly (code $NODE_RC)"; fail=1
