@@ -171,42 +171,45 @@ def path_length_m(pts: list[tuple[float, float]]) -> float:
     return total
 
 
-def qgc_plan(pts: list[tuple[float, float]], alt_m: float, speed_mps: float) -> dict:
-    """QGroundControl mission (.plan JSON) flying the waypoints at `alt_m` above home, for PX4 or ArduPilot."""
+def _item(seq: int, command: int, params: list, frame: int = 3, alt: float | None = None) -> dict:
+    it = {"autoContinue": True, "command": command, "doJumpId": seq, "frame": frame, "params": params,
+          "type": "SimpleItem"}  # fmt: skip
+    if alt is not None:
+        it.update({"AMSLAltAboveTerrain": None, "Altitude": alt, "AltitudeMode": 1})
+    return it
+
+
+def qgc_plan(
+    pts: list[tuple[float, float]], alt_m: float, speed_mps: float, fence_margin_m: float | None = 50.0
+) -> dict:
+    """QGroundControl mission (.plan JSON) for PX4 or ArduPilot: take off, fly the waypoints at `alt_m` above home,
+    return to launch. With `fence_margin_m`, an inclusion geofence around the search area (plus that margin) is added:
+    the autopilot's own failsafe then stops the drone leaving the approved area, whatever the software above it does."""
+    lat0, lon0 = pts[0]
     items = [
-        {
-            "autoContinue": True,
-            "command": 178,  # MAV_CMD_DO_CHANGE_SPEED
-            "doJumpId": 1,
-            "frame": 2,
-            "params": [1, speed_mps, -1, 0, 0, 0, 0],
-            "type": "SimpleItem",
-        }
+        _item(1, 22, [0, 0, 0, None, lat0, lon0, alt_m], alt=alt_m),  # MAV_CMD_NAV_TAKEOFF
+        _item(2, 178, [1, speed_mps, -1, 0, 0, 0, 0], frame=2),  # MAV_CMD_DO_CHANGE_SPEED
     ]
-    for i, (lat, lon) in enumerate(pts, start=2):
-        items.append(
-            {
-                "AMSLAltAboveTerrain": None,
-                "Altitude": alt_m,
-                "AltitudeMode": 1,
-                "autoContinue": True,
-                "command": 16,  # MAV_CMD_NAV_WAYPOINT
-                "doJumpId": i,
-                "frame": 3,  # MAV_FRAME_GLOBAL_RELATIVE_ALT
-                "params": [0, 0, 0, None, lat, lon, alt_m],
-                "type": "SimpleItem",
-            }
-        )
+    for i, (lat, lon) in enumerate(pts, start=3):
+        items.append(_item(i, 16, [0, 0, 0, None, lat, lon, alt_m], alt=alt_m))  # MAV_CMD_NAV_WAYPOINT
+    items.append(_item(len(items) + 1, 20, [0, 0, 0, 0, 0, 0, 0], frame=2))  # MAV_CMD_NAV_RETURN_TO_LAUNCH
+    fence = {"circles": [], "polygons": [], "version": 2}
+    if fence_margin_m is not None:
+        lats, lons = [p[0] for p in pts], [p[1] for p in pts]
+        dlat = fence_margin_m / EARTH_M_PER_DEG_LAT
+        dlon = fence_margin_m / (EARTH_M_PER_DEG_LAT * math.cos(math.radians(lat0)))
+        s_, n_, w_, e_ = min(lats) - dlat, max(lats) + dlat, min(lons) - dlon, max(lons) + dlon
+        fence["polygons"].append({"inclusion": True, "polygon": [[s_, w_], [n_, w_], [n_, e_], [s_, e_]], "version": 1})
     return {
         "fileType": "Plan",
-        "geoFence": {"circles": [], "polygons": [], "version": 2},
+        "geoFence": fence,
         "groundStation": "QGroundControl",
         "mission": {
             "cruiseSpeed": speed_mps,
             "firmwareType": 12,  # PX4; QGC converts for ArduPilot
             "hoverSpeed": 5,
             "items": items,
-            "plannedHomePosition": [pts[0][0], pts[0][1], 0],
+            "plannedHomePosition": [lat0, lon0, 0],
             "vehicleType": 2,  # multirotor
             "version": 2,
         },
