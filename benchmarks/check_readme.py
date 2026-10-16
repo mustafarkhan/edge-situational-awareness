@@ -192,7 +192,10 @@ CLAIMS: list[tuple[str, list[str]]] = [
                 j(f, "cross_track_m_max", "{:.2f} m"),
             ],
         )
-        for anchor, f in (("| sea, 100 m, 0.5 km²", "sitl_sea.json"), ("| land at night, thermal, 120 m", "sitl_land.json"))
+        for anchor, f in (
+            ("| sea, 100 m, 0.5 km²", "sitl_sea.json"),
+            ("| land at night, thermal, 120 m", "sitl_land.json"),
+        )
     ],
 ]
 

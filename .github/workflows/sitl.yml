@@ -39,9 +39,11 @@ jobs:
       - name: Python dependencies
         run: python -m pip install pymavlink
       - name: Fly the sea search mission
-        run: ARDUCOPTER=ardupilot-sitl/arducopter ARDUPILOT=ardupilot-sitl bash scripts/sitl_fly.sh samples/search_example.plan sitl_sea.json | grep -v "^autopilot: \|^reached item"
+        run: |
+          ARDUCOPTER=ardupilot-sitl/arducopter ARDUPILOT=ardupilot-sitl bash scripts/sitl_fly.sh samples/search_example.plan sitl_sea.json | grep -v "^autopilot: \|^reached item"
       - name: Fly the land (night, thermal) search mission
-        run: ARDUCOPTER=ardupilot-sitl/arducopter ARDUPILOT=ardupilot-sitl bash scripts/sitl_fly.sh samples/land_search_example.plan sitl_land.json | grep -v "^autopilot: \|^reached item"
+        run: |
+          ARDUCOPTER=ardupilot-sitl/arducopter ARDUPILOT=ardupilot-sitl bash scripts/sitl_fly.sh samples/land_search_example.plan sitl_land.json | grep -v "^autopilot: \|^reached item"
       - name: Summary
         if: always()
         run: |
