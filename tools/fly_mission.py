@@ -213,12 +213,13 @@ def main():
         "cross_track_m_max": round(max(dev), 2) if dev else None,
         "positions_outside_fence": outside,
         "wall_seconds": round(time.time() - t0, 1),
-        "autopilot_messages": events[-20:],
     }
+    ok = rep["waypoints_reached"] == len(wps) and outside == 0
+    if not ok:  # keep the autopilot's last messages only when they are needed to explain a failure
+        rep["autopilot_messages"] = events[-20:]
     print(json.dumps(rep, indent=1))
     if a.report:
-        Path(a.report).write_text(json.dumps(rep, indent=1))
-    ok = rep["waypoints_reached"] == len(wps) and outside == 0
+        Path(a.report).write_text(json.dumps(rep, indent=1) + "\n")
     sys.exit(0 if ok else 1)
 
 

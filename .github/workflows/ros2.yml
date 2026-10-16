@@ -38,8 +38,16 @@ jobs:
         run: TELEMETRY=1 bash ros2_ws/test_node.sh
       - name: Run the node and check its topics (camera frames from a sensor_msgs/Image topic)
         run: IMAGE_TOPIC=1 bash ros2_ws/test_node.sh
-      - name: Launch files parse (single camera; RGB + thermal with recording)
+      - name: RGB + thermal launch starts both detectors and records a bag
+        shell: bash
         run: |
           source /opt/ros/humble/setup.bash && source ros2_ws/install/setup.bash
           ros2 launch esa_ros esa.launch.py --show-args > /dev/null
-          ros2 launch esa_ros esa_dual.launch.py --show-args | grep -q thermal_model
+          BAGS=$(mktemp -d)
+          timeout -s INT 40 ros2 launch esa_ros esa_dual.launch.py record:=true bag_dir:="$BAGS" > dual.log 2>&1 || true
+          cat dual.log
+          grep -q "camera=rgb" dual.log && grep -q "camera=thermal" dual.log
+          shopt -s nullglob
+          bags=("$BAGS"/sortie_*/*.db3 "$BAGS"/sortie_*/*.mcap)
+          [ ${#bags[@]} -gt 0 ] || { echo "::error title=rosbag::no bag written"; ls -R "$BAGS"; exit 1; }
+          echo "bag written: ${bags[*]}"

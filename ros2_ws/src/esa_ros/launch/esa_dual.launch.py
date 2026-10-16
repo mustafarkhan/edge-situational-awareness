@@ -6,15 +6,18 @@
 
 Each camera runs in its own namespace (/rgb/..., /thermal/...) with its own model, field of view and alert
 labels; both share the drone telemetry and the operator's review decisions. The web backend and TAK bridge
-subscribe to /rgb/alerts and /thermal/alerts. On a Jetson Orin Nano the two models run at roughly half the
-single-camera frame rate each; see docs/JETSON.md for how to measure that on your unit.
+subscribe to /rgb/alerts and /thermal/alerts.
 
-record:=true writes a rosbag2 of the camera images, telemetry, detections, alerts and status to ~/esa_bags.
-Field-test sorties are recorded so every number in the test report can be recomputed later (docs/DEPLOYMENT.md).
+record:=true writes one rosbag2 per sortie (bag_dir/sortie_<UTC time>) with the camera images, telemetry,
+detections, alerts, status and operator decisions, so every number in a field-test report can be recomputed
+later (docs/DEPLOYMENT.md).
 """
 
+import time
+from pathlib import Path
+
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -27,9 +30,18 @@ MAVROS = [
     ("gimbal_pitch", "/gimbal_pitch"),
     ("alert_reviews", "/alert_reviews"),
 ]
+RECORDED = [
+    "/mavros/global_position/global",
+    "/mavros/global_position/rel_alt",
+    "/mavros/global_position/compass_hdg",
+    "/mavros/state",
+    "/gimbal_pitch",
+    "/alert_reviews",
+    *[f"/{cam}/{topic}" for cam in ("rgb", "thermal") for topic in ("detections", "tracks_geo", "alerts", "status")],
+]
 
 
-def detector(cam: str, labels: list[str], imgsz: int):
+def detector(cam: str, labels: list[str], imgsz: int) -> Node:
     arg = LaunchConfiguration
     return Node(
         package="esa_ros",
@@ -54,18 +66,21 @@ def detector(cam: str, labels: list[str], imgsz: int):
     )
 
 
-def generate_launch_description():
-    record_topics = [
-        LaunchConfiguration("rgb_topic"),
-        LaunchConfiguration("thermal_topic"),
-        "/mavros/global_position/global",
-        "/mavros/global_position/rel_alt",
-        "/mavros/global_position/compass_hdg",
-        "/mavros/state",
-        "/gimbal_pitch",
-        "/alert_reviews",
-        *[f"/{c}/{t}" for c in ("rgb", "thermal") for t in ("detections", "tracks_geo", "alerts", "status")],
+def recorder(context, *_):
+    """ros2 bag record into bag_dir/sortie_<UTC time>; arguments are resolved when the launch starts."""
+    bag_dir = Path(LaunchConfiguration("bag_dir").perform(context)).expanduser()
+    bag_dir.mkdir(parents=True, exist_ok=True)
+    out = bag_dir / time.strftime("sortie_%Y%m%dT%H%M%SZ", time.gmtime())
+    cameras = [LaunchConfiguration(t).perform(context) for t in ("rgb_topic", "thermal_topic")]
+    return [
+        ExecuteProcess(
+            cmd=["ros2", "bag", "record", "-o", str(out), *cameras, *RECORDED],
+            output="screen",
+        )
     ]
+
+
+def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument("rgb_topic", default_value="/camera/rgb/image_raw"),
@@ -79,19 +94,6 @@ def generate_launch_description():
             DeclareLaunchArgument("bag_dir", default_value="~/esa_bags"),
             detector("rgb", ["swimmer", "person", "pedestrian"], 1280),
             detector("thermal", ["person", "swimmer"], 640),
-            # one bag per sortie, named by start time (rosbag2's default name), in bag_dir
-            ExecuteProcess(
-                condition=IfCondition(LaunchConfiguration("record")),
-                cmd=[
-                    "mkdir -p",
-                    LaunchConfiguration("bag_dir"),
-                    "&& cd",
-                    LaunchConfiguration("bag_dir"),
-                    "&& ros2 bag record",
-                    *[[" ", t] for t in record_topics],
-                ],  # fmt: skip
-                shell=True,
-                output="screen",
-            ),
+            OpaqueFunction(function=recorder, condition=IfCondition(LaunchConfiguration("record"))),
         ]
     )

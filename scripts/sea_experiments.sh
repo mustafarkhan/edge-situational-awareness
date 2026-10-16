@@ -51,4 +51,4 @@ for c in DJI_0055 DJI_0059 DJI_0057 DJI_0001_d3; do
 done
 python benchmarks/geo_real.py --clips outputs/sea_mot/DJI_0055 outputs/sea_mot/DJI_0059 \
   outputs/sea_mot/DJI_0057 outputs/sea_mot/DJI_0001_d3
-echo done
+echo "done"
