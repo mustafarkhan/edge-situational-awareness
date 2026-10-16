@@ -78,7 +78,7 @@ def main():
     fig.tight_layout()
     out = REPO / "docs" / "figures" / f"{name}_{args.split}_stats.png"
     fig.savefig(out, dpi=120)
-    print(f"\nfigure -> {out}")
+    print(f"\nfigure -> {out.relative_to(REPO)}")
     summary = {"n_images": len(imgs), "n_boxes": int(len(sizes)), "classes": dict(cls_count.most_common())}
     for s in args.imgsz:
         eff = sizes * s / longest
@@ -92,7 +92,7 @@ def main():
         )
     js = REPO / "benchmarks" / "results" / f"{name}_{args.split}_stats.json"
     js.write_text(json.dumps(summary, indent=1))
-    print(f"summary -> {js}")
+    print(f"summary -> {js.relative_to(REPO)}")
 
 
 if __name__ == "__main__":

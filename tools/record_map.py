@@ -56,7 +56,7 @@ def main():
         stderr=subprocess.DEVNULL,
     )
     time.sleep(3)
-    vid_dir = Path(tempfile.mkdtemp(prefix="claude-rec-"))
+    vid_dir = Path(tempfile.mkdtemp(prefix="esa-rec-"))
     try:
         from playwright.sync_api import sync_playwright
 

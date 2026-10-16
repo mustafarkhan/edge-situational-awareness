@@ -606,7 +606,7 @@ models/        the SeaDronesSee model (AGPL-3.0)
 samples/       1 s of real sea footage with its flight log, INT8 calibration images, an example search mission
 web/           FastAPI WebSocket bridge + React/MapLibre map; web/sample/ has a recorded real flight
 src/esa/       shared code: geolocation, telemetry, alerts, search planning, TAK (CoT), tegrastats, COCO evaluation
-docs/          deployment + field-test plan, experiment log, limitations, model cards, demo video
+docs/          deployment + field-test plan, experiment log, limitations, model cards, architecture, demo video
 tests/         unit tests
 ```
 

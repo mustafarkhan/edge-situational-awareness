@@ -14,6 +14,7 @@ import json
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -217,7 +218,7 @@ def scene_bars(df, title, metric, label, note):
     ax.spines[["top", "right"]].set_visible(False)
     ax.set_ylim(0, max(df[metric]) * 1.3)
     fig.tight_layout()
-    tmp = Path("/tmp/esa-bars.png")
+    tmp = Path(tempfile.gettempdir()) / "esa-bars.png"
     fig.savefig(tmp, facecolor=fig.get_facecolor())
     plt.close(fig)
     im, d = canvas()
@@ -306,7 +307,7 @@ def mpl_dark():
 
 def chart_scene(title, fig, note, size=(1800, 860)):
     plt = mpl_dark()
-    tmp = Path("/tmp/esa-chart.png")
+    tmp = Path(tempfile.gettempdir()) / "esa-chart.png"
     fig.savefig(tmp, facecolor=fig.get_facecolor(), dpi=100)
     plt.close(fig)
     im, d = canvas()
@@ -518,7 +519,7 @@ def main():
     stats = json.loads(Path(args.stats_json).read_text())
     sx = json.loads(Path(args.sahi_json).read_text())
 
-    work = Path("/tmp/esa-video")
+    work = Path(tempfile.gettempdir()) / "esa-video"
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir()
     R = REPO / "benchmarks/results"

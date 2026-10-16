@@ -1,8 +1,8 @@
 """Debounced alerts: only alert once a track has been seen for N frames, and learn from operator rejections.
 
 Raw detections flicker. A single false positive on a wave crest should not page a rescue crew. Requiring
-persistence across frames trades a little delay for far fewer false alarms -- a deliberate design
-trade-off.
+persistence across frames trades a little delay for far fewer false alarms (measured in
+benchmarks/alert_load.py).
 
 Operator loop (v2): when an operator rejects an alert (a buoy, a wave pattern, debris), the same spot tends to
 fire again as soon as the tracker gives the object a new ID. `reject()` remembers the rejected position and
