@@ -7,6 +7,8 @@ on:
   push:
     branches: [main]
     paths: ["tools/fly_mission.py", "scripts/sitl_fly.sh", "src/esa/search.py", "samples/*.plan", ".github/workflows/sitl.yml"]
+  pull_request:
+    paths: ["tools/fly_mission.py", "scripts/sitl_fly.sh", "src/esa/search.py", "samples/*.plan", ".github/workflows/sitl.yml"]
   workflow_dispatch:
 
 env:
