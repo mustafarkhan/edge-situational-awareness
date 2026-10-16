@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.0.0-dev — towards field tests on real drones
+
+- **Flight-ready missions:** `.plan` files now take off, set speed, search, return to launch, with an inclusion
+  geofence 50 m around the search box
+- **`tools/fly_mission.py`:** MAVLink mission + geofence upload to PX4/ArduPilot; arms and flies only in a simulator
+- **ArduPilot SITL in CI:** both example missions flown end to end (14/14 and 36/36 waypoints, within 1.1 m of the
+  planned track, never outside the fence). Found and fixed: ArduPilot's default 300 m circle fence aborts 1 km searches
+- **ROS 2 node:** camera frames from `sensor_msgs/Image` (newest frame only, dropped frames counted; mono16
+  thermal stretched to 8 bit), `/status` health topic (OK / DEGRADED / NO_CAMERA), `esa_dual.launch.py` for RGB +
+  thermal gimbals with per-camera model and FOV, rosbag recording of every sortie
+- **docs/DEPLOYMENT.md:** what the software may and may not do in the air, hardware, EU/Finnish rules checklist,
+  humanitarian-use boundary, staged field tests T0-T6 with pass conditions, field data protocol
+
 ## v2.0.0 — 2026-10-15 — search planning, operator loop, TAK, text prompts, thermal
 
 - **Land and sea throughout:** search planning for a person on land at night (thermal, 91% get a box; a 25° lens at

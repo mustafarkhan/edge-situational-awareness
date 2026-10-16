@@ -1,0 +1,32 @@
+{
+ "autopilot": "ArduPilot",
+ "waypoints_planned": 36,
+ "waypoints_reached": 36,
+ "track_points": 8017,
+ "cross_track_m_median": 0.01,
+ "cross_track_m_max": 1.1,
+ "positions_outside_fence": 0,
+ "wall_seconds": 200.7,
+ "autopilot_messages": [
+  "Reached command #28",
+  "Mission: 29 WP",
+  "Reached command #29",
+  "Mission: 30 WP",
+  "Reached command #30",
+  "Mission: 31 WP",
+  "Reached command #31",
+  "Mission: 32 WP",
+  "Reached command #32",
+  "Mission: 33 WP",
+  "Reached command #33",
+  "Mission: 34 WP",
+  "Reached command #34",
+  "Mission: 35 WP",
+  "Reached command #35",
+  "Mission: 36 WP",
+  "Reached command #36",
+  "Mission: 37 WP",
+  "Reached command #37",
+  "Mission: 38 WP"
+ ]
+}
