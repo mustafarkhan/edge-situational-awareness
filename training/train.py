@@ -23,8 +23,10 @@ def main(cfg_path: str, overrides: list[str] | None = None):
     model = YOLO(cfg.pop("model"))
     cfg.setdefault("seed", 0)
     cfg.setdefault("deterministic", True)
-    results = model.train(**cfg)
-    run_dir = Path(results.save_dir)
+    model.train(**cfg)
+    # the trainer knows where it saved; the return value does not (it is None after multi-GPU DDP training,
+    # where training runs in a subprocess: found on the first Kaggle run with two T4s)
+    run_dir = Path(model.trainer.save_dir)
     shutil.copy(cfg_path, run_dir / "experiment_config.yaml")
     print(f"\nweights: {run_dir / 'weights' / 'best.pt'}")
     print("Now log this run in docs/EXPERIMENT_LOG.md (what you changed, and why).")
