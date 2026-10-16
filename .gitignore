@@ -1,31 +1,36 @@
-# data and outputs never go in git
+# Data, weights and training outputs never go in git
 /datasets/
+/weights
+weights/
 runs/
+outputs/
+wandb/
+mlruns/
+configs/datasets/*.yaml
 *.pt
 *.onnx
 *.engine
 *.cache
-wandb/
-mlruns/
-outputs/
+*.mp4
+*.jsonl
+
+# Build and tooling
 __pycache__/
 *.egg-info/
 .venv/
+.ruff_cache/
+.pytest_cache/
+.ipynb_checkpoints/
 node_modules/
 web/frontend/dist/
 ros2_ws/build/
 ros2_ws/install/
 ros2_ws/log/
-*.mp4
-*.jsonl
-!docs/figures/.gitkeep
-weights/
-/datasets/
-!docs/video/demo_video.mp4
-configs/datasets/*.yaml
-/weights
-# small, freely licensed files a stranger needs to run the demo without any dataset
+.DS_Store
+
+# Exceptions: small, freely licensed files a stranger needs to run the demo without any dataset
 !models/sds_y11n_ep4.pt
+!models/hit_y11n_ep5.pt
+!docs/video/demo_video.mp4
 !web/sample/*.jsonl
 !samples/*/telemetry.jsonl
-!models/hit_y11n_ep5.pt

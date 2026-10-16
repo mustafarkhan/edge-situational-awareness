@@ -9,7 +9,7 @@
 #
 # Output: $OUT/esa_gpu_results.zip  (default OUT=/kaggle/working, which Kaggle keeps after the run)
 set -uo pipefail
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$0")/../.." || exit 1
 OUT=${OUT:-/kaggle/working}
 DATA=${DATA:-/tmp/esa_data}   # scratch disk, not kept (only $OUT is)
 STAGES=${STAGES:-"sea thermal land sea1280"}
@@ -44,7 +44,7 @@ fetch() {  # url file: resumable, retried, and checked; a cut-off download must 
 
 has_images() { [ "$(ls "$1" 2>/dev/null | wc -l)" -gt 0 ]; }
 
-EXTRA=(device=$DEVICE)
+EXTRA=("device=$DEVICE")
 [ "$QUICK" = 1 ] && EXTRA+=(epochs=1 fraction=0.1 batch=8)
 # shellcheck disable=SC2206
 EXTRA+=(${EXTRA_ARGS:-})   # e.g. EXTRA_ARGS="batch=4 workers=0 cache=false" on a small machine

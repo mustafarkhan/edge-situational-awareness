@@ -93,7 +93,7 @@ done
 # (an object's latitude has 7 decimals; the drone's own has fewer, so it cannot match)
 if grep -qE "$LAT_RE" "$OUT/tracks_geo.txt"; then
   echo "OK   /tracks_geo has geolocated objects ($MODE)"
-  grep -oE "$LAT_RE[^}]*" "$OUT/tracks_geo.txt" | head -n 3 > "$OUT/geo_sample.txt"
+  grep -oE "${LAT_RE}[^}]*" "$OUT/tracks_geo.txt" | head -n 3 > "$OUT/geo_sample.txt"
   annotate notice "geolocated objects ($MODE)" "$OUT/geo_sample.txt"
 else
   echo "FAIL /tracks_geo has no geolocated objects ($MODE)"

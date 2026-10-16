@@ -1,0 +1,32 @@
+# pip install pre-commit && pre-commit install   (runs the fast checks on every commit)
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+      - id: ruff-format
+  - repo: local  # same tools as scripts/check.sh: pip install actionlint-py shellcheck-py
+    hooks:
+      - id: actionlint
+        name: actionlint (workflow files)
+        entry: actionlint
+        language: system
+        files: ^\.github/workflows/.*\.ya?ml$
+      - id: shellcheck
+        name: shellcheck
+        entry: shellcheck -S warning
+        language: system
+        types: [shell]
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-yaml
+        args: [--unsafe]
+      - id: check-json
+      - id: end-of-file-fixer
+        exclude: (\.(ipynb|plan|svg)$|^benchmarks/results/|^data/.*\.json$)  # generated files
+      - id: trailing-whitespace
+        exclude: \.(ipynb|plan|md)$
+      - id: check-added-large-files
+        args: [--maxkb=6000]
+      - id: detect-private-key
