@@ -12,6 +12,10 @@ on:
 env:
   ARDUPILOT_TAG: Copter-4.7.2
 
+defaults:
+  run:
+    shell: bash  # -eo pipefail: a failed flight must fail the step even when piped through grep
+
 jobs:
   fly:
     runs-on: ubuntu-22.04
@@ -48,7 +52,8 @@ jobs:
         if: always()
         run: |
           for f in sitl_sea.json sitl_land.json; do
-            [ -f "$f" ] && python -c "import json,sys; d=json.load(open(sys.argv[1])); d.pop('autopilot_messages', None); print('::notice title=' + sys.argv[1] + '::' + json.dumps(d))" "$f"
+            [ -f "$f" ] || { echo "::error title=$f::no report"; continue; }
+            python -c "import json,sys; d=json.load(open(sys.argv[1])); d.pop('autopilot_messages', None); print('::notice title=' + sys.argv[1] + '::' + json.dumps(d))" "$f"
           done
       - uses: actions/upload-artifact@v4
         if: always()
