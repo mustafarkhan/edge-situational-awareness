@@ -6,6 +6,8 @@ on:
   push:
     branches: [main]
     paths: ["ros2_ws/**", "src/esa/**", "tools/fly_mission.py", ".github/workflows/ros2.yml"]
+  pull_request:
+    paths: ["ros2_ws/**", "src/esa/**", "tools/fly_mission.py", ".github/workflows/ros2.yml"]
   workflow_dispatch:
 
 jobs:
