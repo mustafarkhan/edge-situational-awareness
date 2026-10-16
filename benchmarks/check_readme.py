@@ -28,6 +28,14 @@ def v(csv: str, where: dict, col: str, fmt: str = "{:.3f}", scale: float = 1.0) 
     return fmt.format(float(df.iloc[-1][col]) * scale)
 
 
+def j(name: str, key: str, fmt: str = "{:.2f}") -> str:
+    """A value from a JSON result file (e.g. the SITL flight reports)."""
+    import json
+
+    val = json.loads((R / name).read_text())[key]
+    return fmt.format(val) if isinstance(val, (int, float)) else str(val)
+
+
 Z = "zeroshot.csv"
 SEA, SEA2 = "seadronessee.csv", "seadronessee_two_class.csv"
 pct = "{:.0f}%"
@@ -173,6 +181,18 @@ CLAIMS: list[tuple[str, list[str]]] = [
             ("| YOLOE-11m, text prompts | no | 0.28", "visdrone_prompts_prompts_shared.csv", "yoloe11m_land"),
             ("| **YOLO11n fine-tuned (§2)** |", "visdrone_prompts_shared.csv", "ft_y11n_1280"),
         )
+    ],
+    # v3: simulated flights of the example missions
+    *[
+        (
+            anchor,
+            [
+                j(f, "waypoints_reached", "{:d}/") + j(f, "waypoints_planned", "{:d}"),
+                j(f, "cross_track_m_median", "{:.2f} m"),
+                j(f, "cross_track_m_max", "{:.2f} m"),
+            ],
+        )
+        for anchor, f in (("| sea, 100 m, 0.5 km²", "sitl_sea.json"), ("| land at night, thermal, 120 m", "sitl_land.json"))
     ],
 ]
 

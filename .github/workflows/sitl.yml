@@ -1,0 +1,53 @@
+name: SITL flight
+
+# Flies the example search missions (sea, and land at night) in ArduPilot's software-in-the-loop simulator:
+# upload mission + geofence with tools/fly_mission.py, arm, fly in AUTO, and check that every search waypoint
+# was reached, the drone followed the planned tracks and never left the geofence.
+on:
+  push:
+    branches: [main]
+    paths: ["tools/fly_mission.py", "scripts/sitl_fly.sh", "src/esa/search.py", "samples/*.plan", ".github/workflows/sitl.yml"]
+  workflow_dispatch:
+
+env:
+  ARDUPILOT_TAG: Copter-4.7.2
+
+jobs:
+  fly:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Cache the ArduCopter SITL build
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ardupilot-sitl
+          key: arducopter-sitl-${{ env.ARDUPILOT_TAG }}
+      - name: Build ArduCopter SITL (first run only, ~12 min)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          python -m pip install empy==3.3.4 pexpect future
+          git clone -q --depth 1 --branch "$ARDUPILOT_TAG" https://github.com/ArduPilot/ardupilot.git ap
+          cd ap && git submodule update -q --init --recursive --depth 1
+          ./waf configure --board sitl > /dev/null && ./waf copter > /dev/null
+          mkdir -p ../ardupilot-sitl/Tools/autotest/default_params
+          cp build/sitl/bin/arducopter ../ardupilot-sitl/
+          cp Tools/autotest/default_params/copter.parm ../ardupilot-sitl/Tools/autotest/default_params/
+      - name: Python dependencies
+        run: python -m pip install pymavlink
+      - name: Fly the sea search mission
+        run: ARDUCOPTER=ardupilot-sitl/arducopter ARDUPILOT=ardupilot-sitl bash scripts/sitl_fly.sh samples/search_example.plan sitl_sea.json | grep -v "^autopilot: \|^reached item"
+      - name: Fly the land (night, thermal) search mission
+        run: ARDUCOPTER=ardupilot-sitl/arducopter ARDUPILOT=ardupilot-sitl bash scripts/sitl_fly.sh samples/land_search_example.plan sitl_land.json | grep -v "^autopilot: \|^reached item"
+      - name: Summary
+        if: always()
+        run: |
+          for f in sitl_sea.json sitl_land.json; do
+            [ -f "$f" ] && python -c "import json,sys; d=json.load(open(sys.argv[1])); d.pop('autopilot_messages', None); print('::notice title=' + sys.argv[1] + '::' + json.dumps(d))" "$f"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: sitl-reports, path: "sitl_*.json" }

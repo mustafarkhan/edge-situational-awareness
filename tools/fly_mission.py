@@ -74,18 +74,31 @@ def upload(m, items, mission_type: int, timeout: float = 20.0):
     raise TimeoutError("mission upload timed out")
 
 
+def wait_param(m, name: str, timeout: float = 5.0):
+    """The PARAM_VALUE for `name` (others may arrive first, e.g. replies to earlier requests)."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        msg = m.recv_match(type="PARAM_VALUE", blocking=True, timeout=1)
+        if msg is not None and msg.param_id.rstrip("\x00") == name:
+            return msg
+    return None
+
+
 def set_param(m, name: str, value: float):
-    m.mav.param_set_send(
-        m.target_system, m.target_component, name.encode(), value, mavutil.mavlink.MAV_PARAM_TYPE_REAL32
-    )
-    m.recv_match(type="PARAM_VALUE", blocking=True, timeout=3)
+    for _ in range(3):
+        m.mav.param_set_send(
+            m.target_system, m.target_component, name.encode(), value, mavutil.mavlink.MAV_PARAM_TYPE_REAL32
+        )
+        msg = wait_param(m, name, 3)
+        if msg is not None and abs(msg.param_value - value) < 1e-3:
+            return
+    raise RuntimeError(f"autopilot did not accept {name}={value}")
 
 
 def is_sitl(m) -> bool:
     """ArduPilot SITL has SIM_* parameters; real autopilots do not."""
     m.mav.param_request_read_send(m.target_system, m.target_component, b"SIM_SPEEDUP", -1)
-    msg = m.recv_match(type="PARAM_VALUE", blocking=True, timeout=5)
-    return msg is not None and msg.param_id.rstrip("\x00") == "SIM_SPEEDUP"
+    return wait_param(m, "SIM_SPEEDUP") is not None
 
 
 def dist_to_segment(p, a, b) -> float:
@@ -125,7 +138,7 @@ def main():
     if fence:
         upload(m, fence, FENCE)
         if ardupilot:
-            set_param(m, "FENCE_TYPE", 4 | 2 | 1)  # polygon + circle + max altitude
+            set_param(m, "FENCE_TYPE", 4 | 1)  # polygon + max altitude (not the default 300 m circle around home)
             set_param(m, "FENCE_ALT_MAX", max(p[6] for c, f, p in items if c == 16) + 30)
             set_param(m, "FENCE_ACTION", 1)  # RTL on breach
             set_param(m, "FENCE_ENABLE", 1)
@@ -152,23 +165,38 @@ def main():
     m.mav.command_long_send(m.target_system, m.target_component, 300, 0, 0, 0, 0, 0, 0, 0, 0)  # MISSION_START
     print("armed, mission started")
 
+    m.mav.request_data_stream_send(m.target_system, m.target_component, 0, 4, 1)  # all streams at 4 Hz
     wps = [(p[4], p[5]) for c, _, p in plan_items(plan) if c == 16]
     fence_poly = plan["geoFence"]["polygons"][0]["polygon"] if plan["geoFence"]["polygons"] else None
-    track, reached, t0 = [], set(), time.time()
+    track, reached, events, t0 = [], set(), [], time.time()
+    first_wp_seq = next(i for i, (c, _, _) in enumerate(items) if c == 16 and not (ardupilot and i == 0))
+    search_start = None
     last_seq = len(items) - 1
     while time.time() - t0 < a.timeout:
-        msg = m.recv_match(type=["GLOBAL_POSITION_INT", "MISSION_ITEM_REACHED", "HEARTBEAT"], blocking=True, timeout=5)
+        msg = m.recv_match(
+            type=["GLOBAL_POSITION_INT", "MISSION_ITEM_REACHED", "HEARTBEAT", "STATUSTEXT"], blocking=True, timeout=5
+        )
         if msg is None:
             continue
-        if msg.get_type() == "GLOBAL_POSITION_INT":
+        if msg.get_type() == "STATUSTEXT":
+            events.append(msg.text)
+            print("autopilot:", msg.text, flush=True)
+        elif msg.get_type() == "HEARTBEAT" and msg.get_srcSystem() == m.target_system:
+            if track and max(t[2] for t in track) > 5 and not m.motors_armed():
+                events.append("disarmed before the mission finished")
+                break
+        elif msg.get_type() == "GLOBAL_POSITION_INT":
             track.append((msg.lat / 1e7, msg.lon / 1e7, msg.relative_alt / 1000))
         elif msg.get_type() == "MISSION_ITEM_REACHED":
             reached.add(msg.seq)
+            if msg.seq == first_wp_seq:
+                search_start = len(track)  # the search legs begin at the first search waypoint
+            print(f"reached item {msg.seq}", flush=True)
             if msg.seq >= last_seq - 1:  # last search waypoint reached; RTL follows
                 break
-    # check the flown search legs (after reaching cruise altitude) against the planned path
+    # check the flown search legs (from the first search waypoint on, at search altitude) against the planned path
     alt = wps and [p[6] for c, _, p in plan_items(plan) if c == 16][0]
-    legs = [t for t in track if t[2] > 0.8 * alt]
+    legs = [t for t in track[search_start or 0 :] if t[2] > 0.8 * alt]
     dev = [min(dist_to_segment(t, wps[i], wps[i + 1]) for i in range(len(wps) - 1)) for t in legs]
     outside = 0
     if fence_poly:
@@ -184,7 +212,8 @@ def main():
         "cross_track_m_median": round(sorted(dev)[len(dev) // 2], 2) if dev else None,
         "cross_track_m_max": round(max(dev), 2) if dev else None,
         "positions_outside_fence": outside,
-        "sim_seconds": round(time.time() - t0, 1),
+        "wall_seconds": round(time.time() - t0, 1),
+        "autopilot_messages": events[-20:],
     }
     print(json.dumps(rep, indent=1))
     if a.report:

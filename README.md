@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/mustafarkhan/edge-situational-awareness/actions/workflows/ci.yml/badge.svg)](https://github.com/mustafarkhan/edge-situational-awareness/actions/workflows/ci.yml)
 [![ROS 2](https://github.com/mustafarkhan/edge-situational-awareness/actions/workflows/ros2.yml/badge.svg)](https://github.com/mustafarkhan/edge-situational-awareness/actions/workflows/ros2.yml)
+[![SITL flight](https://github.com/mustafarkhan/edge-situational-awareness/actions/workflows/sitl.yml/badge.svg)](https://github.com/mustafarkhan/edge-situational-awareness/actions/workflows/sitl.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
 Detecting, tracking and geolocating people and vehicles (on land, by day and by thermal camera at night) and
@@ -18,6 +19,9 @@ the script and results file that produced it.
 > on CPU: detection, tracking on real footage, tilt-aware geolocation on real flight logs, INT8, failure analysis,
 > **search planning**, an **operator review loop with TAK (ATAK) output**, and **text-prompt search**. The ROS 2 node takes
 > live MAVROS telemetry and is tested end to end in CI.
+> **v3 (in progress): towards field tests.** Search missions now take off, return and carry a geofence, and are flown
+> end to end in ArduPilot's simulator in CI; the ROS node reads RGB and thermal camera topics and reports its own
+> health; [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) is the hardware, rules, safety and field-test plan (§14).
 > **Still to come:** TensorRT on a Jetson Orin Nano (speed, watts, joules per frame) with
 > [one command](benchmarks/run_on_jetson.sh).
 
@@ -40,6 +44,7 @@ the script and results file that produced it.
 | **v2:** can operators cope with the alerts? | Spatial de-duplication cuts alerts 45% (33 → 18) without losing a swimmer; alerts go to ATAK via Cursor on Target (§11) |
 | **v2:** can text prompts replace training? | No: a 4-epoch fine-tune still beats a 3× larger open-vocabulary model by 1.6× on swimmers (§12) |
 | **v2:** what about night? | Thermal: colour-trained AP 0.023 → fine-tuned **0.445**; better at night (0.471) than by day (0.338) (§13) |
+| **v3:** do the planned searches fly? | In ArduPilot SITL, yes: all **14/14** (sea) and **36/36** (land) search waypoints reached, tracks within **0.91 m / 1.10 m** of the plan, never outside the geofence (§14) |
 | Does tilt-aware geolocation help on real flights? | Better on 3 of 4 real clips (best: swimmer drift **3.2 → 1.0 m/s**). Worse on the fourth, whose attitude log disagrees with the video |
 
 ## Try it (no dataset download, about 5 minutes on a laptop CPU)
@@ -478,6 +483,50 @@ groups. Thermal objects are bigger than at sea: median 27 px at the 640 px input
   altitude may come from the same session, so held-out groups may share some scenery with training.
 - HIT-UAV is all land scenes. Thermal detection **at sea** (warm heads in cold water, sun glint) is not tested.
 
+## 14. Towards real drones: simulation in the loop and the field-test plan (v3)
+
+Everything above was measured on datasets. This section is about getting it onto a university drone safely, and
+is the start of v3. The full plan (hardware, EU and Finnish rules, safety case, staged field tests, data handling)
+is in **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
+
+**Who flies the drone.** The autopilot (PX4 or ArduPilot) does, always. This software only *reads* telemetry and
+raises advisory alerts that a person confirms or rejects; it sends no commands to the vehicle, so a frozen or
+unplugged Jetson cannot affect the flight. Missions are uploaded from the ground station, with a geofence.
+
+**Missions that are ready to fly.** The search planner's `.plan` files (§10) now contain the whole sortie:
+take-off, cruise speed, the search pattern at the planned altitude, return to launch, and an inclusion geofence
+50 m around the search box. [`tools/fly_mission.py`](tools/fly_mission.py) uploads mission and geofence over
+MAVLink to PX4 or ArduPilot; it arms and flies **only** when the autopilot reports itself as a simulator.
+
+**Flown in simulation in CI.** The [SITL workflow](.github/workflows/sitl.yml) builds ArduCopter 4.7.2's
+software-in-the-loop simulator and flies both example missions ([`scripts/sitl_fly.sh`](scripts/sitl_fly.sh)):
+
+| mission | search waypoints reached | distance from the planned track (median / max) | positions outside the geofence |
+|---|---|---|---|
+| sea, 100 m, 0.5 km² (§10a) | 14/14 | 0.01 m / 0.91 m | 0 |
+| land at night, thermal, 120 m, 0.5 km² (§10b) | 36/36 | 0.01 m / 1.10 m | 0 |
+
+[`benchmarks/results/sitl_sea.json`](benchmarks/results/sitl_sea.json),
+[`sitl_land.json`](benchmarks/results/sitl_land.json). The first attempt failed usefully: ArduPilot's default
+300 m circular fence around home tripped on the 1 km search box and sent the drone home mid-search. The tool now
+enables only the polygon fence from the plan (plus a maximum altitude). This checks the mission and the autopilot
+interface, not the camera: simulated flight says nothing about detection, which only field tests can measure.
+
+**Camera input and health on the drone.** The ROS 2 node now also reads frames from a `sensor_msgs/Image` topic
+(any ROS camera driver), processing only the newest frame so latency cannot build up when the model is slower than
+the camera, and publishes `/status` once a second: `OK`, `DEGRADED` (telemetry stale, so no coordinates) or
+`NO_CAMERA`, with frame rate and dropped frames. `esa_dual.launch.py` runs one detector per camera of an RGB +
+thermal gimbal (own model and field of view each, shared telemetry and operator decisions) and can record every
+sortie to a rosbag. Both are tested in the ROS 2 workflow.
+
+**What this is for.** Finding people who need help: on land, at sea, after disasters, and in conflict zones in the
+humanitarian sense of locating casualties and missing people for rescuers. It is not for targeting or surveillance;
+the alert wording, TAK marker types and the operator review step are built for rescue (DEPLOYMENT.md §4).
+
+**Next:** field stage T1-T2 (static and hover ladder) to measure the real detection curve with the university's
+camera, which replaces the dataset curve in the planner; then blind searches (T3-T5) that compare measured with
+planned probability of detection.
+
 ## System
 
 ```mermaid
@@ -549,14 +598,15 @@ training/      train.py (config-driven), evaluate_zeroshot.py (AP_small), evalua
 configs/       one YAML per experiment; tracker variants
 export/        ONNX + INT8 quantisation (CPU), TensorRT export (Jetson)
 benchmarks/    tracking scorer, geolocation sensitivity, Jetson benchmark, results CSVs
-tools/         sim_flight.py, detect_video.py (detect + track + geolocate), search_by_text.py, record_map.py
-scripts/       land, sea, prompt and thermal experiment scripts: every experiment, in order
-ros2_ws/       ROS 2 Humble package (MAVROS telemetry input) + end-to-end test (runs in CI)
+tools/         sim_flight.py, detect_video.py (detect + track + geolocate), search_by_text.py, record_map.py,
+               fly_mission.py (upload a search mission + geofence to PX4/ArduPilot; flies only in SITL)
+scripts/       land, sea, prompt and thermal experiment scripts: every experiment, in order; sitl_fly.sh; kaggle/
+ros2_ws/       ROS 2 Humble package (MAVROS telemetry, camera topics, /status, RGB+thermal launch, rosbag) + CI test
 models/        the SeaDronesSee model (AGPL-3.0)
 samples/       1 s of real sea footage with its flight log, INT8 calibration images, an example search mission
 web/           FastAPI WebSocket bridge + React/MapLibre map; web/sample/ has a recorded real flight
 src/esa/       shared code: geolocation, telemetry, alerts, search planning, TAK (CoT), tegrastats, COCO evaluation
-docs/          experiment log, limitations, model card, demo video
+docs/          deployment + field-test plan, experiment log, limitations, model cards, demo video
 tests/         unit tests
 ```
 
