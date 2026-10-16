@@ -28,8 +28,8 @@ the new numbers are comparable with every other number in the README.
    the tab.
 3. When it finishes (the version page shows "Successful"), open it, go to the **Output** tab and download
    `esa_gpu_results.zip`.
-4. Unzip it into the repository. The models are evaluated on the held-out test sets with the same scripts as before, then the
-   README, model cards and figures are updated.
+4. Unzip it into the repository and score each model on its held-out test set with the same evaluation scripts as
+   every other number in the README (README, "Reproduce"). Then update the README, model cards and figures.
 
 ## What it trains
 
