@@ -72,11 +72,11 @@ def test_foreign_origin_is_refused_at_handshake(server):
 
 
 def test_review_is_attributed_to_the_token_owner_and_chained(server, tmp_path):
-    server.on_frame(json.dumps({"frame": 1, "alerts": [ALERT]}))
     with TestClient(server.app) as c:
+        server.on_frame(json.dumps({"frame": 1, "camera": "rgb", "alerts": [ALERT]}))
         ws, s = connect(c, TOKEN_B)
         s.receive_json()  # hello
-        s.send_text(json.dumps({"type": "review", "track_id": 5, "decision": "reject", "operator": "alice"}))
+        s.send_text(json.dumps({"type": "review", "uid": "rgb-5", "decision": "reject", "operator": "alice"}))
         r = s.receive_json()
         ws.__exit__(None, None, None)
     assert r["operator"] == "bob" and r["decision"] == "reject" and r["label"] == "swimmer"
@@ -89,7 +89,7 @@ def test_review_of_unknown_alert_is_ignored(server, tmp_path):
     with TestClient(server.app) as c:
         ws, s = connect(c)
         s.receive_json()
-        s.send_text(json.dumps({"type": "review", "track_id": 404, "decision": "reject"}))
+        s.send_text(json.dumps({"type": "review", "uid": "rgb-404", "decision": "reject"}))
         ws.__exit__(None, None, None)
     assert server.STATE["reviews"] == {}
     assert not (tmp_path / "reviews.jsonl").exists() or (tmp_path / "reviews.jsonl").read_text() == ""
@@ -97,9 +97,35 @@ def test_review_of_unknown_alert_is_ignored(server, tmp_path):
 
 def test_alert_memory_is_bounded(server):
     server.MAX_ALERTS = 10
-    for i in range(25):
-        server.on_frame(json.dumps({"frame": i + 1, "alerts": [{**ALERT, "track_id": i}]}))
-    assert list(server.STATE["alerts"]) == list(range(15, 25))
+    for i in range(25):  # far apart, so none are fused
+        server.on_frame(json.dumps({"frame": i + 1, "alerts": [{**ALERT, "track_id": i, "lat": 61.0 + i * 0.01}]}))
+    assert list(server.STATE["alerts"]) == [f"rgb-{i}" for i in range(15, 25)]
+
+
+def test_cameras_get_their_own_ids_and_one_person_is_one_alert(server):
+    rgb = server.on_frame(json.dumps({"frame": 1, "camera": "rgb", "alerts": [ALERT],
+                                      "detections": [{"track_id": 5, "label": "swimmer"}]}))  # fmt: skip
+    near = {**ALERT, "track_id": 5, "lat": ALERT["lat"] + 2 / 111_320}  # thermal track 5, 2 m from the RGB alert
+    thermal = server.on_frame(json.dumps({"frame": 1, "camera": "thermal", "alerts": [near]}))
+    first = json.loads(rgb[0])
+    assert first["alerts"][0]["uid"] == "rgb-5" and first["detections"][0]["uid"] == "rgb-5"
+    assert json.loads(thermal[0])["alerts"] == []  # not a second alert for the operator
+    assert json.loads(thermal[1]) == {"type": "alert_update", "uid": "rgb-5", "cameras": ["rgb", "thermal"]}
+    far = {**ALERT, "track_id": 6, "lat": ALERT["lat"] + 50 / 111_320}  # a second person, 50 m away
+    out = json.loads(server.on_frame(json.dumps({"frame": 2, "camera": "thermal", "alerts": [far]}))[0])
+    assert out["alerts"][0]["uid"] == "thermal-6" and out["alerts"][0]["cameras"] == ["thermal"]
+    assert set(server.STATE["alerts"]) == {"rgb-5", "thermal-6"}
+
+
+def test_slow_tak_server_does_not_block_the_map(server):
+    sent = []
+    server.STATE["tak"] = server.TakWorker("tcp://192.0.2.1:9")  # TEST-NET address: connecting hangs or fails
+    t0 = __import__("time").monotonic()
+    for i in range(50):
+        sent += server.on_frame(json.dumps({"frame": i + 1, "drone": {"lat": 61.49, "lon": 23.76},
+                                            "alerts": [{**ALERT, "track_id": i, "lat": 61.0 + i * 0.01}]}))  # fmt: skip
+        server.STATE["last_drone_cot"] = 0.0
+    assert __import__("time").monotonic() - t0 < 1.0 and len(sent) == 50
 
 
 def test_health_does_not_reveal_the_tak_endpoint(server):

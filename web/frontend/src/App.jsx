@@ -30,7 +30,7 @@ function popupContent(p) {
   const div = document.createElement("div");
   const b = document.createElement("b");
   b.textContent = String(p.label ?? "");
-  div.append(b, document.createElement("br"), `track ${p.track_id ?? "–"}`,
+  div.append(b, document.createElement("br"), `track ${p.uid ?? p.track_id ?? "–"}`,
     document.createElement("br"), `conf ${p.conf ?? "–"}`);
   return div;
 }
@@ -95,7 +95,8 @@ export default function App() {
   const [operator, setOperator] = useState(null);
   const [frame, setFrame] = useState(null);
   const [alerts, setAlerts] = useState([]);
-  const [reviews, setReviews] = useState({}); // track_id -> "confirm" | "reject", shared by all operators
+  const [reviews, setReviews] = useState({}); // alert uid ("rgb-5") -> "confirm" | "reject", shared by all operators
+  const detsByCamera = useRef(new Map()); // latest located detections per camera (RGB and thermal draw together)
   const wsRef = useRef(null);
 
   useEffect(() => {
@@ -143,11 +144,16 @@ export default function App() {
         try { msg = JSON.parse(ev.data); } catch { return; }
         if (msg.type === "hello") { setOperator(msg.operator); setStatus("live"); return; }
         if (msg.type === "review") {  // a decision by this or another operator
-          setReviews((r) => ({ ...r, [msg.track_id]: msg.decision }));
+          setReviews((r) => ({ ...r, [msg.uid]: msg.decision }));
+          return;
+        }
+        if (msg.type === "alert_update") {  // another camera now sees an alert already raised
+          setAlerts((a) => a.map((x) => (x.uid === msg.uid ? { ...x, cameras: msg.cameras } : x)));
           return;
         }
         if (msg.frame === 0) {  // a replay restarted: start clean so nothing is counted twice
           setAlerts([]); setReviews({}); seenTracks.current = new Set(); trails.current = new Map();
+          detsByCamera.current = new Map();
         }
         setFrame(msg);
         if (msg.alerts?.length) setAlerts((a) => [...msg.alerts.map((x) => ({ ...x, at: new Date() })), ...a].slice(0, 20));
@@ -174,16 +180,18 @@ export default function App() {
         geometry: { type: "LineString", coordinates: dronePath.current } }]));
     }
     // detections above the horizon (tilted camera) have no ground position: keep them off the map
-    const dets = (msg.detections ?? []).filter((d) => d.lat != null && d.lon != null);
-    for (const d of dets) if (d.track_id != null) seenTracks.current.add(d.track_id);
+    const located = (msg.detections ?? []).filter((d) => d.lat != null && d.lon != null);
+    for (const d of located) if (d.uid != null) seenTracks.current.add(d.uid);
     setUniqueTracks(seenTracks.current.size);
-    for (const d of dets) {
-      if (d.track_id == null) continue;
-      const t = trails.current.get(d.track_id) ?? { label: d.label, pts: [] };
+    for (const d of located) {
+      if (d.uid == null) continue;
+      const t = trails.current.get(d.uid) ?? { label: d.label, pts: [] };
       t.pts.push([d.lon, d.lat]); if (t.pts.length > TRAIL) t.pts.shift();
-      trails.current.set(d.track_id, t);
+      trails.current.set(d.uid, t);
     }
-    const live = new Set(dets.map((d) => d.track_id));
+    detsByCamera.current.set(msg.camera ?? "rgb", located);
+    const dets = [...detsByCamera.current.values()].flat();
+    const live = new Set(dets.map((d) => d.uid));
     for (const id of trails.current.keys()) if (!live.has(id)) trails.current.delete(id); // simple: drop lost tracks
     m.getSource("dets").setData(fc(dets.map((d) => ({ type: "Feature",
       geometry: { type: "Point", coordinates: [d.lon, d.lat] }, properties: d }))));
@@ -195,11 +203,11 @@ export default function App() {
 
   const review = (a, decision) =>
     wsRef.current?.readyState === 1 &&
-    wsRef.current.send(JSON.stringify({ type: "review", track_id: a.track_id, decision }));
-  const pending = alerts.filter((a) => !reviews[a.track_id]).length;
+    wsRef.current.send(JSON.stringify({ type: "review", uid: a.uid, decision }));
+  const pending = alerts.filter((a) => !reviews[a.uid]).length;
 
   const counts = {};
-  for (const d of frame?.detections ?? []) counts[d.label] = (counts[d.label] ?? 0) + 1;
+  for (const d of [...detsByCamera.current.values()].flat()) counts[d.label] = (counts[d.label] ?? 0) + 1;
 
   return (
     <div className="app">
@@ -215,10 +223,13 @@ export default function App() {
         <h2>Alerts {pending > 0 && <span className="badge">{pending} to review</span>}</h2>
         {alerts.length ? (
           <ul className="alerts">{alerts.map((a, i) => {
-            const r = reviews[a.track_id];
+            const r = reviews[a.uid];
+            const both = (a.cameras?.length ?? 0) > 1;
             return (
-              <li key={i} className={r ? `reviewed ${r}` : ""}><b>{a.message}</b><br />
+              <li key={a.uid ?? i} className={r ? `reviewed ${r}` : ""}><b>{a.message}</b><br />
                 <span className="muted">{a.at.toLocaleTimeString()} · {a.lat?.toFixed(5)}, {a.lon?.toFixed(5)}</span>
+                {a.cameras && <div className={`cameras ${both ? "both" : ""}`}>
+                  seen by {a.cameras.join(" + ")}{both ? " (same spot)" : ""}</div>}
                 {r ? <div className="decision">{r === "confirm" ? "✓ confirmed" : "✕ rejected – alerts here muted"}</div> : (
                   <div className="actions">
                     <button className="confirm" onClick={() => review(a, "confirm")}>Confirm</button>

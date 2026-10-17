@@ -75,7 +75,7 @@ async def operator(port: int, log: list[dict]):
             msg = json.loads(await asyncio.wait_for(ws.recv(), 30))
             if msg.get("alerts"):
                 a = msg["alerts"][0]
-                await ws.send(json.dumps({"type": "review", "track_id": a["track_id"], "decision": "reject"}))
+                await ws.send(json.dumps({"type": "review", "uid": a["uid"], "decision": "reject"}))
                 log.append(a)
             if msg.get("type") == "review":
                 log.append(msg)
@@ -110,7 +110,7 @@ def main():
 
         types = [re.search(r'type="([^"]+)"', e).group(1) for e in received]
         alert = log[0]
-        uid = f"esa-drone-1-swimmer-{alert['track_id']}"
+        uid = f"esa-drone-1-swimmer-{alert['uid']}"  # camera-scoped: esa-drone-1-swimmer-rgb-<track>
         checks = {
             "drone position reached the TAK client": "a-f-A-M-H-Q" in types,
             "swimmer alert reached the TAK client": any(f'uid="{uid}"' in e and 'type="a-u-S"' in e for e in received),

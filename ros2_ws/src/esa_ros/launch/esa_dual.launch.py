@@ -5,8 +5,11 @@
       rgb_model:=models/sds_y11n_ep4.engine thermal_model:=models/hit_y11n_ep5.engine record:=true
 
 Each camera runs in its own namespace (/rgb/..., /thermal/...) with its own model, field of view and alert
-labels; both share the drone telemetry and the operator's review decisions. The web backend and TAK bridge
-subscribe to /rgb/alerts and /thermal/alerts.
+labels; both share the drone telemetry and the operator's review decisions. The ground station takes both cameras:
+
+  python web/backend/server.py --ros --camera-topics /rgb/tracks_geo /thermal/tracks_geo
+
+and shows a person seen by both cameras as one alert (esa.fusion). Tested end to end in CI (ros2_ws/test_dual.sh).
 
 record:=true writes one rosbag2 per sortie (bag_dir/sortie_<UTC time>) with the camera images, telemetry,
 detections, alerts, status and operator decisions, so every number in a field-test report can be recomputed
