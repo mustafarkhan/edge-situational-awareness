@@ -21,7 +21,7 @@ COCO AP at IoU 0.50:0.95 (`training/evaluate_sea.py`); source `benchmarks/result
 | input | AP50 | AP | AP small | swimmer | boat | jetski | life-saving app. | buoy | CPU ms (2 vCPU) |
 |---|---|---|---|---|---|---|---|---|---|
 | 640 | 0.438 | 0.221 | 0.145 | 0.126 | 0.455 | 0.110 | 0.000 | 0.413 | 75 |
-| 1280 | 0.488 | 0.266 | 0.207 | 0.185 | 0.503 | 0.143 | 0.000 | 0.501 | 259 |
+| 1280 | 0.488 | 0.266 | 0.207 | 0.185 | 0.503 | 0.143 | 0.000 | 0.500 | 259 |
 
 Leakage check: on 400 official-val frames from *training* videos the same model scores swimmer AP 0.295 vs 0.185
 on unseen videos. About +0.09 of that gap is leakage (a COCO model shows only +0.018 between the same two sets).

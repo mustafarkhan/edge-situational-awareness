@@ -55,7 +55,7 @@ jobs:
           pip install ultralytics lap && pip install -e .
       - name: Detect, track, geolocate and alert on real sea footage
         run: |
-          python tools/detect_video.py --model models/sds_y11n_ep4.pt --source samples/sea_DJI_0055/frames \
+          python tools/detect_video.py --model models/sds_y11n_1280_gpu.pt --source samples/sea_DJI_0055/frames \
             --imgsz 1280 --conf 0.1 --telemetry samples/sea_DJI_0055/telemetry.jsonl \
             --alert swimmer --alert-min-frames 15 --out outputs/my_run.jsonl | tee run.log
           python - <<'PY'

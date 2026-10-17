@@ -34,6 +34,9 @@ ros2_ws/log/
 # Exceptions: small, freely licensed files a stranger needs to run the demo without any dataset
 !models/sds_y11n_ep4.pt
 !models/hit_y11n_ep5.pt
+!models/sds_y11n_1280_gpu.pt
+!models/hit_y11n_640_gpu.pt
+!models/SHA256SUMS
 !docs/video/demo_video.mp4
 !web/sample/*.jsonl
 !samples/*/telemetry.jsonl

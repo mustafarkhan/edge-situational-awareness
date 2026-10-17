@@ -11,7 +11,7 @@
 # Results: benchmarks/results/jetson*.csv and jetson_report.md. Send those back (or commit them).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-WEIGHTS=${WEIGHTS:-models/sds_y11n_ep4.pt}
+WEIGHTS=${WEIGHTS:-models/sds_y11n_1280_gpu.pt}
 STEM=$(basename "$WEIGHTS" .pt)
 OUT=benchmarks/results
 REPORT=$OUT/jetson_report.md

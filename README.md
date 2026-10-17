@@ -22,6 +22,8 @@ the script and results file that produced it.
 > **v3 (in progress): towards field tests.** Search missions now take off, return and carry a geofence, and are flown
 > end to end in ArduPilot's simulator in CI; the ROS node reads RGB and thermal camera topics and reports its own
 > health; [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) is the hardware, rules, safety and field-test plan (§14).
+> The three detectors have now been **trained properly on a GPU** (60-120 epochs, [docs/KAGGLE.md](docs/KAGGLE.md)) and
+> scored on the same held-out test sets: AP +22% at sea, +15% on thermal, +33% on land (§2, §9, §13).
 > **Still to come:** TensorRT on a Jetson Orin Nano (speed, watts, joules per frame) with
 > [one command](benchmarks/run_on_jetson.sh).
 
@@ -31,19 +33,19 @@ the script and results file that produced it.
 |---|---|
 | How small are objects in drone views? | At YOLO's 640 px input the **median object is 11 px** across; **92%** are "small" (< 32 px) |
 | Does an off-the-shelf detector cope? | No. COCO-pretrained YOLO11n: AP **0.041** on small objects, 0.58 on large ones |
-| What helps most? | 1280 px input and a short fine-tune: small-object AP **0.041 → 0.182** (4.4×), beating a 3× larger pretrained model at half the time |
+| What helps most? | 1280 px input and fine-tuning: small-object AP **0.041 → 0.266** (6.5×) after 80 GPU epochs (0.182 after 3 CPU epochs), beating a 3× larger pretrained model at under half the time |
 | Is sliced inference (SAHI) worth it here? | Not on these images: 0.110 at 882 ms vs 0.124 at 317 ms for plain 1280 px input |
 | Do objects keep their IDs when the drone moves fast? | Only with camera-motion compensation: IDF1 **0.33 → 0.57**, ID switches **244 → 77** |
 | Where do position errors come from? | Ignoring a **10° gimbal tilt costs 11.8 m**, more than a 5 m GPS error |
 | Does INT8 work? | Quantising everything gives **zero detections**; keeping the head in FP32 costs **5%** small-object AP for **20%** less time and a **66%** smaller model |
 | Where does it still fail? | Objects under 8 px (**10%** found), heavy occlusion (**23%**), night (precision **70% → 44%**) |
-| **At sea:** does the land recipe transfer? | Yes. Swimmer AP **0.027 → 0.185** (COCO 640 → fine-tuned 1280); boats 0.155 → 0.503 |
+| **At sea:** does the land recipe transfer? | Yes. Swimmer AP **0.027 → 0.222** (COCO 640 → GPU-trained at 1280); boats 0.155 → 0.562 |
 | Can the official sea validation split be trusted? | No. It shares videos with train and **inflates swimmer AP by ~50%** (0.185 → 0.295), measured against a control |
 | Does tracking hold on real sea footage? | IDF1 **0.50–0.79** on 4 real clips; GMC makes no difference at these slow camera speeds (as the simulation predicts) |
 | **v2:** how high should a search drone fly? | At sea by day: ~5× more sea per hour at 100 m than at 20 m, 0.95 detection per pass, ~1 frame/s is enough. On land at night (thermal): ~1 km²/h, and the lens sets the altitude (§10) |
 | **v2:** can operators cope with the alerts? | Spatial de-duplication cuts alerts 45% (33 → 18) without losing a swimmer; alerts go to ATAK via Cursor on Target (§11) |
 | **v2:** can text prompts replace training? | No: a 4-epoch fine-tune still beats a 3× larger open-vocabulary model by 1.6× on swimmers (§12) |
-| **v2:** what about night? | Thermal: colour-trained AP 0.023 → fine-tuned **0.445**; better at night (0.471) than by day (0.338) (§13) |
+| **v2:** what about night? | Thermal: colour-trained AP 0.023 → GPU-trained **0.512**; better at night (0.525) than by day (0.453) (§13) |
 | **v3:** do the planned searches fly? | In ArduPilot SITL, yes: all **14/14** (sea) and **36/36** (land) search waypoints reached, tracks within **0.91 m / 1.10 m** of the plan, never outside the geofence (§14) |
 | Does tilt-aware geolocation help on real flights? | Better on 3 of 4 real clips (best: swimmer drift **3.2 → 1.0 m/s**). Worse on the fourth, whose attitude log disagrees with the video |
 
@@ -56,7 +58,7 @@ git clone https://github.com/mustafarkhan/edge-situational-awareness && cd edge-
 pip install -r requirements-train.txt && pip install -e .
 
 # detect, track, geolocate and alert on real footage (SeaDronesSee clip never used for training)
-python tools/detect_video.py --model models/sds_y11n_ep4.pt --source samples/sea_DJI_0055/frames \
+python tools/detect_video.py --model models/sds_y11n_1280_gpu.pt --source samples/sea_DJI_0055/frames \
   --imgsz 1280 --conf 0.1 --telemetry samples/sea_DJI_0055/telemetry.jsonl \
   --alert swimmer --alert-min-frames 15 --out outputs/my_run.jsonl --save-video outputs/my_run.mp4
 
@@ -65,7 +67,7 @@ python web/backend/server.py --replay web/sample/sea_DJI_0055.jsonl --rate 15   
 cd web/frontend && npm install && npm run dev     # open that link (add ?offline=1 before the # without internet)
 ```
 
-Model details: [model card](docs/MODEL_CARD_sds_y11n_ep4.md). On a drone, the same pipeline runs as a ROS 2 node fed by
+Model details: [model card](docs/MODEL_CARD_sds_y11n_1280_gpu.md). On a drone, the same pipeline runs as a ROS 2 node fed by
 MAVROS telemetry (see [System](#system)).
 
 ## 1. The data
@@ -99,16 +101,24 @@ Source: [`benchmarks/results/zeroshot.csv`](benchmarks/results/zeroshot.csv), sc
 | YOLO11n | fine-tuned, 2 epochs | 640 | 0.316 | 0.161 | 0.079 | 0.483 | 80 |
 | YOLO11n | fine-tuned, 2 epochs | 1280 | 0.448 | 0.238 | 0.169 | 0.354 | 319 |
 | YOLO11n | fine-tuned, 3 epochs | 640 | 0.334 | 0.173 | 0.087 | 0.527 | 76 |
-| **YOLO11n** | **fine-tuned, 3 epochs** | **1280** | **0.469** | **0.253** | **0.182** | 0.378 | 295 |
+| YOLO11n | fine-tuned, 3 epochs | 1280 | 0.469 | 0.253 | 0.182 | 0.378 | 295 |
+| YOLO11n | trained 80 epochs on a GPU | 640 | 0.476 | 0.251 | 0.163 | 0.558 | 71 |
+| **YOLO11n** | **trained 80 epochs on a GPU** | **1280** | **0.611** | **0.336** | **0.266** | 0.421 | 261 |
 
 - **Resolution beats model size** for small objects: YOLO11n at 1280 beats YOLO11s at 640.
 - **SAHI** nearly triples small-object AP but costs 10× the time of 640 px inference. VisDrone val frames are
   only 960–1920 px wide, so 640 px tiles add little over a 1280 px input. It should matter more on 4K footage
   (a hypothesis, not yet tested).
-- **Fine-tuning** (3 CPU epochs, ~50 min each) gave the biggest gain, but large-object AP fell from 0.58 to 0.38: the
-  model specialised in high-altitude views (see the near-ground failure in §6). A longer GPU run is the next step.
-- Held-out check: two training sequences (9999951, 9999955) were removed **before** training. On 21 frames from one of them
-  the model found **448 of 836** labelled objects (54%, IoU ≥ 0.5, confidence 0.25).
+- **Fine-tuning** gave the biggest gain. After 3 CPU epochs (~50 min each) large-object AP had fallen from 0.58 to
+  0.38: the model had specialised in high-altitude views (see the near-ground failure in §6). Training for 80 epochs on
+  a GPU ([docs/KAGGLE.md](docs/KAGGLE.md)) recovers it at 640 px input (0.56) and lifts small-object AP at 1280 px from
+  0.182 to **0.266**. The GPU model's best epoch was picked on these validation images, so its rows are slightly
+  optimistic; the held-out sequences below are the clean check.
+- **Held-out check:** two training sequences (9999951, 9999955; 768 frames, 37,262 objects) were removed **before**
+  training. At 1280 px and confidence 0.25, an object counts as found when any box overlaps it with IoU ≥ 0.5: the
+  3-epoch model finds **54%** of them, the GPU model **67%**, at slightly higher precision (69% → 71%). Source
+  [`visdrone_holdout.csv`](benchmarks/results/visdrone_holdout.csv), script
+  [`benchmarks/holdout_recall.py`](benchmarks/holdout_recall.py).
 
 ## 3. Tracking under camera motion
 
@@ -239,10 +249,15 @@ as swimmer and *boat* as boat; the other three sea classes have no COCO equivale
 | YOLO11n COCO (2 classes) | 640 | 0.091 | 0.018 | 0.027 | 0.155 | 96 |
 | YOLO11n COCO (2 classes) | 1280 | 0.203 | 0.089 | 0.094 | 0.313 | 303 |
 | YOLO11n fine-tuned 4 epochs, 5 classes | 640 | 0.221 | 0.145 | 0.126 | 0.455 | 75 |
-| **YOLO11n fine-tuned 4 epochs, 5 classes** | **1280** | **0.266** | **0.207** | **0.185** | **0.503** | 259 |
+| YOLO11n fine-tuned 4 epochs, 5 classes | 1280 | 0.266 | 0.207 | 0.185 | 0.503 | 259 |
+| YOLO11n trained 100 epochs at 640 px on a GPU | 1280 | 0.296 | 0.251 | 0.201 | 0.568 | 274 |
+| **YOLO11n trained 60 epochs at 1280 px on a GPU** | **1280** | **0.325** | **0.277** | **0.222** | **0.562** | 260 |
 
-Per class at 1280: jetski 0.143, buoy 0.501, **life-saving appliances 0.000** (521 test boxes, the smallest class;
-four CPU epochs were not enough to learn it).
+The GPU-trained model ([`models/sds_y11n_1280_gpu.pt`](models/sds_y11n_1280_gpu.pt),
+[model card](docs/MODEL_CARD_sds_y11n_1280_gpu.md)) is now the system's sea model: **+22% AP** over the 4-epoch model at
+the same speed. About half of the gain is longer training, half training at the size the model runs at. Per class
+at 1280: jetski 0.143 → 0.242, buoy 0.500 → 0.579, **life-saving appliances 0.000 → 0.019** (521 test boxes, the
+smallest class: still essentially undetected). §10a was measured with the 4-epoch model and has not yet been re-run.
 
 **The official validation split leaks.** SeaDronesSee's val images come from the same videos as its train images.
 Scoring the same fine-tuned model on 400 official-val frames from *training* videos ("seen") vs the unseen test videos,
@@ -256,6 +271,8 @@ and using the COCO model (which saw neither) as a control for scene difficulty:
 
 About +0.09 of the fine-tuned swimmer gap is memorised scenery, not skill: reporting on the official split would
 overstate swimmer AP by roughly 50%.
+Longer training memorises more: the GPU model's swimmer AP is 0.371 on seen videos and 0.222 on unseen ones (+0.149,
+against +0.110 for the 4-epoch model).
 
 **Tracking on real footage.** Four SeaDronesSee-MOT clips (not used for training; 143–285 frames each, 30 fps,
 8.6–50 m altitude), fine-tuned model at 1280 px, confidence 0.1. Source [`tracking_sea.csv`](benchmarks/results/tracking_sea.csv).
@@ -477,10 +494,13 @@ groups. Thermal objects are bigger than at sea: median 27 px at the 640 px input
 | model | test AP | AP person | AP car | AP bicycle | **day AP** | **night AP** |
 |---|---|---|---|---|---|---|
 | YOLO11n COCO (colour photos) | 0.023 | 0.019 | 0.050 | 0.000 | 0.022 | 0.024 |
-| **YOLO11n fine-tuned, 5 CPU epochs** | **0.445** | 0.369 | 0.602 | 0.362 | 0.338 | **0.471** |
+| YOLO11n fine-tuned, 5 CPU epochs | 0.445 | 0.369 | 0.602 | 0.362 | 0.338 | 0.471 |
+| **YOLO11n trained 120 epochs on a GPU** | **0.512** | **0.397** | **0.659** | **0.479** | **0.453** | **0.525** |
 
 - **A colour-trained detector is useless on thermal images** (AP 0.023). Five CPU epochs on thermal data take it to 0.445,
-  AP50 0.81. The model is in [`models/hit_y11n_ep5.pt`](models/hit_y11n_ep5.pt) ([model card](docs/MODEL_CARD_hit_y11n_ep5.md)).
+  AP50 0.81; 120 GPU epochs to **0.512**, AP50 0.85, with the biggest gains by day (0.338 → 0.453) and on bicycles. The
+  GPU model is now the system's thermal model: [`models/hit_y11n_640_gpu.pt`](models/hit_y11n_640_gpu.pt)
+  ([model card](docs/MODEL_CARD_hit_y11n_640_gpu.md)). §10b was measured with the 5-epoch model.
 - **Night is better than day** for thermal (0.471 vs 0.338; people 0.407 vs 0.277): bodies stand out against ground that
   has cooled. A colour camera behaves the other way (§6: precision falls from 70% to 44% at night).
 - **Altitude barely matters here.** AP per altitude bin ranges from 0.37 to 0.57 across 60–130 m, with no downward trend
@@ -488,7 +508,8 @@ groups. Thermal objects are bigger than at sea: median 27 px at the 640 px input
   the range where detection held up at sea (§10).
 - **Leakage check:** the same model scores 0.465 on "seen" frames and 0.445 on held-out groups (+0.020). The COCO
   control model gains +0.017 between the same two sets, so frame-level leakage here is about **+0.003 AP**, far less
-  than at sea (+0.04). One caution: groups are inferred from file names, and different camera angles at the same
+  than at sea (+0.04). The GPU model memorises more: 0.584 seen against 0.512 held out (+0.072, about +0.055 after
+  the control). One caution: groups are inferred from file names, and different camera angles at the same
   altitude may come from the same session, so held-out groups may share some scenery with training.
 - HIT-UAV is all land scenes. Thermal detection **at sea** (warm heads in cold water, sun glint) is not tested.
 

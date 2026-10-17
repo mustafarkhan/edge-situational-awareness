@@ -2,7 +2,7 @@
 
   ros2 launch esa_ros esa_dual.launch.py \
       rgb_topic:=/camera/rgb/image_raw thermal_topic:=/camera/thermal/image_raw \
-      rgb_model:=models/sds_y11n_ep4.engine thermal_model:=models/hit_y11n_ep5.engine record:=true
+      rgb_model:=models/sds_y11n_1280_gpu.engine thermal_model:=models/hit_y11n_640_gpu.engine record:=true
 
 Each camera runs in its own namespace (/rgb/..., /thermal/...) with its own model, field of view and alert
 labels; both share the drone telemetry and the operator's review decisions. The ground station takes both cameras:
@@ -88,8 +88,8 @@ def generate_launch_description():
         [
             DeclareLaunchArgument("rgb_topic", default_value="/camera/rgb/image_raw"),
             DeclareLaunchArgument("thermal_topic", default_value="/camera/thermal/image_raw"),
-            DeclareLaunchArgument("rgb_model", default_value="models/sds_y11n_ep4.pt"),
-            DeclareLaunchArgument("thermal_model", default_value="models/hit_y11n_ep5.pt"),
+            DeclareLaunchArgument("rgb_model", default_value="models/sds_y11n_1280_gpu.pt"),
+            DeclareLaunchArgument("thermal_model", default_value="models/hit_y11n_640_gpu.pt"),
             DeclareLaunchArgument("rgb_hfov_deg", default_value="65.5"),
             DeclareLaunchArgument("thermal_hfov_deg", default_value="25.0"),
             DeclareLaunchArgument("pitch_deg", default_value="90.0"),
