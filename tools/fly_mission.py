@@ -22,6 +22,7 @@ been exercised against PX4 SITL.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import struct
 import sys
@@ -100,8 +101,11 @@ def is_sitl(m) -> bool:
     return param_exists(m, "SIM_SPEEDUP")
 
 
-def fly(m, plan: dict, items, ardupilot: bool, limits: SafetyLimits, timeout: float) -> dict:
-    """Arm in the simulator, run the mission to landing, and check the flown track."""
+def fly(m, plan: dict, items, ardupilot: bool, limits: SafetyLimits, timeout: float) -> tuple[dict, list[dict]]:
+    """Arm in the simulator, run the mission to landing, and check the flown track.
+
+    Returns the report and the track log: one row per position (autopilot time, lat, lon, height above home, and
+    the phase: take-off and transit, search, or return and landing)."""
     deadline = time.time() + 180
     while time.time() < deadline and not m.motors_armed():  # retry until the EKF is happy enough to arm
         m.set_mode("GUIDED")
@@ -117,7 +121,7 @@ def fly(m, plan: dict, items, ardupilot: bool, limits: SafetyLimits, timeout: fl
     print("armed, mission started", flush=True)
 
     wp_seqs = [i for i, (c, _, _) in enumerate(items) if c == NAV_WAYPOINT and not (ardupilot and i == 0)]
-    track, reached, events, search_start, search_end, landed = [], set(), [], 0, None, False
+    track, times, reached, events, search_start, search_end, landed = [], [], set(), [], 0, None, False
     t0 = time.time()
     while time.time() - t0 < timeout:
         msg = m.recv_match(type=["GLOBAL_POSITION_INT", "MISSION_ITEM_REACHED", "HEARTBEAT", "STATUSTEXT"],
@@ -129,6 +133,7 @@ def fly(m, plan: dict, items, ardupilot: bool, limits: SafetyLimits, timeout: fl
             events.append(msg.text)
         elif kind == "GLOBAL_POSITION_INT":
             track.append((msg.lat / 1e7, msg.lon / 1e7, msg.relative_alt / 1000))
+            times.append(msg.time_boot_ms / 1000)
         elif kind == "MISSION_ITEM_REACHED":
             reached.add(msg.seq)
             if msg.seq == wp_seqs[0]:
@@ -144,7 +149,18 @@ def fly(m, plan: dict, items, ardupilot: bool, limits: SafetyLimits, timeout: fl
     rep["sim_wall_seconds"] = round(time.time() - t0, 1)
     if not rep["ok"]:  # keep the autopilot's last messages only when they are needed to explain a failure
         rep["autopilot_messages"] = events[-20:]
-    return rep
+    end = len(track) if search_end is None else search_end
+    log = [
+        {
+            "t_s": round(t - times[0], 2),
+            "lat": la,
+            "lon": lo,
+            "alt_m": round(al, 2),
+            "phase": "transit" if i < search_start else "search" if i < end else "return",
+        }  # fmt: skip
+        for i, (t, (la, lo, al)) in enumerate(zip(times, track))
+    ]
+    return rep, log
 
 
 def main(argv=None):
@@ -159,6 +175,9 @@ def main(argv=None):
     ap.add_argument("--fly", action="store_true", help="SIMULATOR ONLY: arm, run the mission, check the flown track")
     ap.add_argument("--timeout", type=float, default=1200.0, help="--fly: give up after this many seconds")
     ap.add_argument("--report", default=None, help="--fly: write the check results here (JSON)")
+    ap.add_argument(
+        "--track", default=None, help="--fly: write the flown track here (CSV: t_s, lat, lon, alt_m, phase)"
+    )
     a = ap.parse_args(argv)
 
     plan = json.loads(Path(a.plan).read_text())
@@ -190,7 +209,12 @@ def main(argv=None):
         return
     if not a.sitl or not is_sitl(m):
         sys.exit("--fly is for simulators only: give --sitl, and the autopilot must report SIM_* parameters")
-    rep = fly(m, plan, items, ardupilot, limits, a.timeout)
+    rep, log = fly(m, plan, items, ardupilot, limits, a.timeout)
+    if a.track:
+        with open(a.track, "w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=["t_s", "lat", "lon", "alt_m", "phase"])
+            w.writeheader()
+            w.writerows(log)
     rep["autopilot_settings"] = params
     print(json.dumps(rep, indent=1))
     if a.report:
