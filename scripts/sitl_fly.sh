@@ -28,4 +28,4 @@ trap 'kill $SITL 2>/dev/null || true' EXIT
 sleep 5
 kill -0 $SITL 2>/dev/null || { echo "simulator did not start:" >&2; cat "$WORK/sitl.log" >&2; exit 3; }
 python3 -u tools/fly_mission.py --connect tcp:127.0.0.1:5760 --plan "$PLAN" --sitl --fly --timeout "${TIMEOUT:-1200}" \
-  --report "$REPORT"
+  --report "$REPORT" --track "${REPORT%.json}_track.csv"

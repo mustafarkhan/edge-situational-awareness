@@ -2,6 +2,10 @@
 
 ## v3.0.0-dev — towards field tests on real drones
 
+- **Demo video of the whole system** (`docs/video/make_demo.py`): plan, simulated sortie, safety refusal, sea and
+  night detection, operator review, RGB + thermal fusion, TAK, engineering checks, and what is not done yet; built
+  only from the repository's own outputs and results files. `tools/fly_mission.py --track` writes the flown track
+  (CSV), kept as a CI artifact for every simulated sortie
 - **RGB + thermal through to the operator (audit F-3, F-4):** the ground station subscribes to every camera
   (`--camera-topics`), gives tracks camera-scoped IDs (`rgb-5`, `thermal-5`; reviews and TAK markers use them),
   and fuses alerts from different cameras within 5 m / 30 s into one alert marked "seen by rgb + thermal"
