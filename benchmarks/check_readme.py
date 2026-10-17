@@ -28,6 +28,12 @@ def v(csv: str, where: dict, col: str, fmt: str = "{:.3f}", scale: float = 1.0) 
     return fmt.format(float(df.iloc[-1][col]) * scale)
 
 
+def json_value(name: str, key: str):
+    import json
+
+    return json.loads((R / name).read_text())[key]
+
+
 def j(name: str, key: str, fmt: str = "{:.2f}") -> str:
     """A value from a JSON result file (e.g. the SITL flight reports)."""
     import json
@@ -159,9 +165,9 @@ CLAIMS: list[tuple[str, list[str]]] = [
     ),
     # v2: land search plan (thermal)
     (
-        "| 25° (25 mm, the HIT-UAV camera) | 120 m |",
+        "| 25° (25 mm, the HIT-UAV camera) | 110 m |",
         [
-            v("land_search_altitude.csv", {"hfov_deg": 25.0, "alt_m": 120}, c, f)
+            v("land_search_altitude.csv", {"hfov_deg": 25.0, "alt_m": 110}, c, f)
             for c, f in (("px_on_person", "{:.0f} px"), ("p_per_pass", "{:.2f}"), ("km2_h_at_pod80", "{:.2f}"))
         ],
     ),
@@ -182,7 +188,7 @@ CLAIMS: list[tuple[str, list[str]]] = [
             ("| **YOLO11n fine-tuned (§2)** |", "visdrone_prompts_shared.csv", "ft_y11n_1280"),
         )
     ],
-    # v3: simulated flights of the example missions
+    # v3: simulated flights of the example missions (whole sorties)
     *[
         (
             anchor,
@@ -190,11 +196,14 @@ CLAIMS: list[tuple[str, list[str]]] = [
                 j(f, "waypoints_reached", "{:d}/") + j(f, "waypoints_planned", "{:d}"),
                 j(f, "cross_track_m_median", "{:.2f} m"),
                 j(f, "cross_track_m_max", "{:.2f} m"),
+                j(f, "positions_outside_fence", "| {:d} |"),
+                j(f, "max_alt_m", "{:.1f} m"),
+                "| yes |" if json_value(f, "landed") is True else "| NOT LANDED |",
             ],
         )
         for anchor, f in (
             ("| sea, 100 m, 0.5 km²", "sitl_sea.json"),
-            ("| land at night, thermal, 120 m", "sitl_land.json"),
+            ("| land at night, thermal, 60 m", "sitl_land.json"),
         )
     ],
 ]

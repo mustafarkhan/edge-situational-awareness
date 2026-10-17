@@ -40,7 +40,7 @@ the script and results file that produced it.
 | **At sea:** does the land recipe transfer? | Yes. Swimmer AP **0.027 → 0.185** (COCO 640 → fine-tuned 1280); boats 0.155 → 0.503 |
 | Can the official sea validation split be trusted? | No. It shares videos with train and **inflates swimmer AP by ~50%** (0.185 → 0.295), measured against a control |
 | Does tracking hold on real sea footage? | IDF1 **0.50–0.79** on 4 real clips; GMC makes no difference at these slow camera speeds (as the simulation predicts) |
-| **v2:** how high should a search drone fly? | At sea by day: ~5× more sea per hour at 100 m than at 20 m, 0.95 detection per pass, ~1 frame/s is enough. On land at night (thermal): ~1 km²/h at 120 m, and the lens choice matters as much as altitude (§10) |
+| **v2:** how high should a search drone fly? | At sea by day: ~5× more sea per hour at 100 m than at 20 m, 0.95 detection per pass, ~1 frame/s is enough. On land at night (thermal): ~1 km²/h, and the lens sets the altitude (§10) |
 | **v2:** can operators cope with the alerts? | Spatial de-duplication cuts alerts 45% (33 → 18) without losing a swimmer; alerts go to ATAK via Cursor on Target (§11) |
 | **v2:** can text prompts replace training? | No: a 4-epoch fine-tune still beats a 3× larger open-vocabulary model by 1.6× on swimmers (§12) |
 | **v2:** what about night? | Thermal: colour-trained AP 0.023 → fine-tuned **0.445**; better at night (0.471) than by day (0.338) (§13) |
@@ -363,19 +363,20 @@ No land video with identities is available to measure look correlation, so each 
 
 ![Thermal: detection vs size, and ground searched per hour vs altitude](docs/figures/land_search.png)
 
-| thermal lens (640×512 sensor) | best altitude inside the data | person | P(detect) per pass | ground searched per hour at 80% POD |
+| thermal lens (640×512 sensor) | best altitude inside the data, ≤ 115 m | person | P(detect) per pass | ground searched per hour at 80% POD |
 |---|---|---|---|---|
-| 25° (25 mm, the HIT-UAV camera) | 120 m | 11 px | 0.88 | **1.04 km²** |
-| 45° (13 mm) | 60 m | 12 px | 0.89 | 0.99 km² |
+| 25° (25 mm, the HIT-UAV camera) | 110 m | 12 px | 0.90 | 0.98 km² |
+| 45° (13 mm) | 60 m | 12 px | 0.89 | **0.99 km²** |
 
 ([`land_search_altitude.csv`](benchmarks/results/land_search_altitude.csv))
 
 - **Choosing the lens is choosing the altitude.** The wide lens sees more ground but runs out of pixels at 77 m. The
-  narrow lens can fly to 143 m before it does, so under the EU 120 m ceiling the narrow lens is slightly better.
+  narrow lens could fly to 143 m before it does, but missions stay 5 m under the EU 120 m ceiling (§14), and at 110 m
+  it searches 0.98 km² per hour against the wide lens's 0.99 at 60 m: the same, within the precision of the model.
 - **Land at night is slower than sea by day:** about 1 km² per hour against 2.7, because a 640-pixel thermal sensor
   has fewer pixels than a 4K colour camera.
-- Example mission: [`samples/land_search_example.plan`](samples/land_search_example.plan): 0.5 km², 120 m, 18 tracks
-  29 m apart, 18.5 km, 31 min. Open ground only: thermal cannot see through tree canopy.
+- Example mission: [`samples/land_search_example.plan`](samples/land_search_example.plan): 0.5 km², 45° lens at 60 m,
+  19 tracks 27.5 m apart, 19.5 km, 32.5 min. Open ground only: thermal cannot see through tree canopy.
 
 ## 11. Operator in the loop: review, de-duplication, TAK (v2)
 
@@ -503,21 +504,29 @@ unplugged Jetson cannot affect the flight. Missions are uploaded from the ground
 
 **Missions that are ready to fly.** The search planner's `.plan` files (§10) now contain the whole sortie:
 take-off, cruise speed, the search pattern at the planned altitude, return to launch, and an inclusion geofence
-50 m around the search box. [`tools/fly_mission.py`](tools/fly_mission.py) uploads mission and geofence over
-MAVLink to PX4 or ArduPilot; it arms and flies **only** when the autopilot reports itself as a simulator.
+50 m around the search box. [`tools/fly_mission.py`](tools/fly_mission.py) checks the plan first and refuses it if
+any waypoint is less than 5 m under the 120 m ceiling, outside the fence, or if take-off or return-to-launch is
+missing ([`src/esa/mission.py`](src/esa/mission.py)). It then uploads mission and geofence over MAVLink and makes the
+autopilot enforce the same limits: fence ceiling at 120 m, return-to-launch on breach, and a return altitude for
+the site (default: the search altitude) instead of ArduCopter's 15 m default, which can fly into trees on the way
+home. Every setting is read back. It arms and flies **only** when the autopilot reports itself as a simulator.
 
 **Flown in simulation in CI.** The [SITL workflow](.github/workflows/sitl.yml) builds ArduCopter 4.7.2's
-software-in-the-loop simulator and flies both example missions ([`scripts/sitl_fly.sh`](scripts/sitl_fly.sh)):
+software-in-the-loop simulator and flies both example missions as whole sorties, from take-off to landing
+([`scripts/sitl_fly.sh`](scripts/sitl_fly.sh)):
 
-| mission | search waypoints reached | distance from the planned track (median / max) | positions outside the geofence |
-|---|---|---|---|
-| sea, 100 m, 0.5 km² (§10a) | 14/14 | 0.01 m / 0.91 m | 0 |
-| land at night, thermal, 120 m, 0.5 km² (§10b) | 36/36 | 0.01 m / 1.10 m | 0 |
+| mission | search waypoints reached | distance from the planned track (median / max) | positions outside the geofence | highest altitude | landed |
+|---|---|---|---|---|---|
+| sea, 100 m, 0.5 km² (§10a) | 14/14 | 0.01 m / 0.91 m | 0 | 100.0 m | yes |
+| land at night, thermal, 60 m, 0.5 km² (§10b) | 38/38 | 0.01 m / 1.11 m | 0 | 60.0 m | yes |
 
 [`benchmarks/results/sitl_sea.json`](benchmarks/results/sitl_sea.json),
 [`sitl_land.json`](benchmarks/results/sitl_land.json). The first attempt failed usefully: ArduPilot's default
 300 m circular fence around home tripped on the 1 km search box and sent the drone home mid-search. The tool now
-enables only the polygon fence from the plan (plus a maximum altitude). This checks the mission and the autopilot
+enables only the polygon fence from the plan (plus a maximum altitude). The second also failed usefully: with the
+fence ceiling correctly at 120 m, the land mission planned at exactly 120 m breached it on normal altitude-hold
+overshoot and the autopilot aborted the search. Plans now stay 5 m under the ceiling, and the planner and the
+mission tool both refuse anything higher. This checks the mission and the autopilot
 interface, not the camera: simulated flight says nothing about detection, which only field tests can measure.
 
 **Camera input and health on the drone.** The ROS 2 node now also reads frames from a `sensor_msgs/Image` topic

@@ -32,6 +32,7 @@ import yaml
 REPO = Path(__file__).resolve().parents[1]
 R = REPO / "benchmarks" / "results"
 sys.path.insert(0, str(REPO / "src"))
+from esa.mission import MAX_PLAN_ALT_M  # noqa: E402
 from esa.search import (  # noqa: E402
     Camera,
     DetectionCurve,
@@ -46,7 +47,7 @@ from esa.search import (  # noqa: E402
 PERSON = 0
 BINS = [0, 10, 12, 14, 16, 18, 20, 24, 28, 1e9]  # every bin has 30+ persons
 LENSES = {"XT2 25 mm (25° lens, HIT-UAV camera)": 25.0, "XT2 13 mm (45° lens)": 45.0}
-ALTS = (40, 60, 80, 100, 120, 150)
+ALTS = (40, 60, 80, 100, 110, 120, 150)
 
 
 def iou(a, b):
@@ -227,8 +228,8 @@ def main():
     fig.tight_layout()
     fig.savefig(REPO / "docs/figures/land_search.png", dpi=120)
 
-    # example: best lens and altitude within the measured data and the EU 120 m ceiling, 1 km x 0.5 km, 80% POD
-    cand = [r for r in table if r["in_measured_range"] and r["alt_m"] <= 120]  # best lens + altitude, EU 120 m cap
+    # example: best lens and altitude within the measured data and 5 m under the EU 120 m ceiling, 80% POD
+    cand = [r for r in table if r["in_measured_range"] and r["alt_m"] <= MAX_PLAN_ALT_M]
     best = max(cand, key=lambda r: r["km2_h_at_pod80"])
     s = spacing_for_pod(best["sweep_width_m"], 0.8)
     pts = lawnmower(61.4600, 23.8800, 500, 1000, s)

@@ -1,10 +1,10 @@
 {
- "case": "night, thermal, 25 deg lens, person 0.94 m, 10 m/s",
- "alt_m": 120,
- "track_spacing_m": 29.0,
- "tracks": 18,
- "path_km": 18.49,
- "flight_min": 30.8,
+ "case": "night, thermal, 45 deg lens, person 0.94 m, 10 m/s",
+ "alt_m": 60,
+ "track_spacing_m": 27.5,
+ "tracks": 19,
+ "path_km": 19.49,
+ "flight_min": 32.5,
  "pod": 0.8,
  "area_km2": 0.5
 }
