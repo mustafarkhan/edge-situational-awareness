@@ -25,6 +25,7 @@ import argparse
 import asyncio
 import json
 import os
+import queue as queue_mod
 import sys
 import threading
 import time
@@ -47,26 +48,30 @@ from esa.access import (  # noqa: E402
     parse_review,
 )
 from esa.cot import CotSender, alert_event, delete_event, drone_event  # noqa: E402
+from esa.fusion import AlertFusion, alert_uid  # noqa: E402
 
 AUTH_TIMEOUT_S = 5.0
 MAX_ALERTS = 5000  # remembered alerts (for reviews); the oldest are forgotten first
 MAX_MESSAGE_BYTES = 64 * 1024
+SEND_TIMEOUT_S = 2.0  # a browser that cannot take a message within this is dropped, not waited for
 
 clients: set[WebSocket] = set()  # authenticated operators only
 queue: asyncio.Queue | None = None  # created on startup
 ARGS = argparse.Namespace(ros=False, replay=None, rate=10.0, once=False, tak=None, drone_uid="esa-drone-1",
-                          reviews="outputs/reviews.jsonl", ce=15.0, allow_origin=list(DEFAULT_ORIGINS))  # fmt: skip
+                          reviews="outputs/reviews.jsonl", ce=15.0, allow_origin=list(DEFAULT_ORIGINS),
+                          camera_topics=["tracks_geo"], fuse_radius=5.0, fuse_window=30.0)  # fmt: skip
 OPERATORS = OperatorDirectory()  # set in main(); empty = nobody can connect
-STATE = {"alerts": OrderedDict(), "reviews": {}, "tak": None, "tak_sent": 0, "last_drone_cot": 0.0, "ros_pub": None,
-         "audit": None}  # fmt: skip
+STATE = {"alerts": OrderedDict(), "reviews": {}, "tak": None, "tak_sent": 0, "tak_dropped": 0, "last_drone_cot": 0.0,
+         "ros_pub": None, "audit": None, "fusion": AlertFusion()}  # fmt: skip
 
 
 @asynccontextmanager
 async def lifespan(_app):
     global queue
     queue = asyncio.Queue(maxsize=100)
+    STATE["fusion"] = AlertFusion(ARGS.fuse_radius, ARGS.fuse_window, MAX_ALERTS)
     if ARGS.tak:
-        STATE["tak"] = CotSender(ARGS.tak)
+        STATE["tak"] = TakWorker(ARGS.tak)
     if ARGS.reviews:
         STATE["audit"] = AuditLog(ARGS.reviews)
     asyncio.create_task(broadcaster())
@@ -124,21 +129,22 @@ async def authenticate(websocket: WebSocket) -> str | None:
     return OPERATORS.authenticate(msg.get("token"))
 
 
-async def handle_review(tid: int, decision: str, operator: str) -> dict | None:
-    alert = STATE["alerts"].get(tid)
+async def handle_review(uid: str, decision: str, operator: str) -> dict | None:
+    alert = STATE["alerts"].get(uid)
     if alert is None:
         return None
     review = {
         "type": "review",
-        "track_id": tid,
+        "uid": uid,
         "decision": decision,
         "label": alert["label"],
+        "cameras": alert.get("cameras", [alert.get("camera")]),
         "lat": alert.get("lat"),
         "lon": alert.get("lon"),
         "operator": operator,  # from the token, never from the client's message
         "time": time.time(),
     }
-    STATE["reviews"][tid] = review
+    STATE["reviews"][uid] = review
     if STATE["audit"] is not None:
         STATE["audit"].append(review)
     tak_send_review(alert, decision)
@@ -148,47 +154,102 @@ async def handle_review(tid: int, decision: str, operator: str) -> dict | None:
     return review
 
 
+class TakWorker:
+    """Sends Cursor-on-Target from its own thread, so a slow or unreachable TAK server never stalls the map.
+
+    Messages wait in a bounded queue; when it is full the oldest are dropped (a stale position is worth less than
+    a current one) and counted in /health.
+    """
+
+    def __init__(self, url: str, maxsize: int = 1000):
+        self.url, self.q = url, queue_mod.Queue(maxsize=maxsize)
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def send(self, xml: str):
+        while True:
+            try:
+                self.q.put_nowait(xml)
+                return
+            except queue_mod.Full:
+                try:
+                    self.q.get_nowait()
+                    STATE["tak_dropped"] += 1
+                except queue_mod.Empty:
+                    pass
+
+    def _run(self):
+        sender = None
+        while True:
+            xml = self.q.get()
+            try:
+                if sender is None:
+                    sender = CotSender(self.url)
+                sender.send(xml)
+                STATE["tak_sent"] += 1
+            except OSError as e:  # never let TAK problems stop the map; reconnect on the next message
+                print(f"TAK send failed: {e}", file=sys.stderr)
+                sender = None
+                time.sleep(1.0)
+
+
 def tak_send(xml: str):
-    if STATE["tak"] is None:
-        return
-    try:
+    if STATE["tak"] is not None:
         STATE["tak"].send(xml)
-        STATE["tak_sent"] += 1
-    except OSError as e:  # never let TAK problems stop the map
-        print(f"TAK send failed: {e}", file=sys.stderr)
 
 
 def tak_send_review(alert: dict, decision: str):
     if alert.get("lat") is None:
         return
-    uid = f"{ARGS.drone_uid}-{alert['label']}-{alert['track_id']}"
     if decision == "confirm":
         tak_send(alert_event(alert, ARGS.drone_uid, ARGS.ce, confirmed=True, stale_s=3600))
     else:
-        tak_send(delete_event(uid, alert["lat"], alert["lon"]))
+        tak_send(delete_event(f"{ARGS.drone_uid}-{alert['label']}-{alert['uid']}", alert["lat"], alert["lon"]))
 
 
-def on_frame(text: str):
-    """Side effects of one detection frame: remember alerts, forward alerts and the drone to TAK."""
+def on_frame(text: str) -> list[str]:
+    """One detection frame from one camera -> the messages for the operators.
+
+    Detections and alerts get camera-scoped IDs ("rgb-5"). An alert that another camera has already raised for the
+    same spot (esa.fusion) does not reach the operator again: an "alert_update" says which cameras now see it.
+    New alerts, and the drone at 1 Hz, also go to TAK.
+    """
     try:
         msg = json.loads(text)
     except json.JSONDecodeError:
-        return
-    if msg.get("frame") == 0:  # a replay restarted: forget the previous pass
+        return []
+    if not isinstance(msg, dict):
+        return []
+    camera = str(msg.get("camera") or "rgb")
+    msg["camera"] = camera
+    if msg.get("frame") == 0 and not ARGS.ros:  # a replay restarted: forget the previous pass
         STATE["alerts"].clear()
         STATE["reviews"].clear()
+        STATE["fusion"].clear()
+    for d in msg.get("detections") or []:
+        if d.get("track_id") is not None:
+            d["uid"] = alert_uid(camera, d["track_id"])
+    now, new_alerts, updates = time.monotonic(), [], []
     for a in msg.get("alerts") or []:
-        STATE["alerts"][a["track_id"]] = a
-        STATE["alerts"].move_to_end(a["track_id"])
-        while len(STATE["alerts"]) > MAX_ALERTS:
-            STATE["alerts"].popitem(last=False)
-        if a.get("lat") is not None:
-            tak_send(alert_event(a, ARGS.drone_uid, ARGS.ce))
+        fa, is_new = STATE["fusion"].add(camera, a["track_id"], a.get("lat"), a.get("lon"), now)
+        if is_new:
+            a.update(uid=fa.uid, camera=camera, cameras=sorted(fa.cameras))
+            STATE["alerts"][fa.uid] = a
+            while len(STATE["alerts"]) > MAX_ALERTS:
+                STATE["alerts"].popitem(last=False)
+            new_alerts.append(a)
+            if a.get("lat") is not None:
+                tak_send(alert_event(a, ARGS.drone_uid, ARGS.ce))
+        elif fa.uid in STATE["alerts"]:
+            stored = STATE["alerts"][fa.uid]
+            if stored.get("cameras") != sorted(fa.cameras):
+                stored["cameras"] = sorted(fa.cameras)
+                updates.append(json.dumps({"type": "alert_update", "uid": fa.uid, "cameras": stored["cameras"]}))
+    msg["alerts"] = new_alerts
     d = msg.get("drone")
-    now = time.monotonic()
     if d and now - STATE["last_drone_cot"] >= 1.0:  # drone position to TAK at 1 Hz
         STATE["last_drone_cot"] = now
         tak_send(drone_event(ARGS.drone_uid, d["lat"], d["lon"], d.get("alt_m")))
+    return [json.dumps(msg), *updates]
 
 
 @app.get("/health")
@@ -198,24 +259,28 @@ def health():
         "source": "ros" if ARGS.ros else ARGS.replay,
         "tak": bool(ARGS.tak),
         "tak_messages_sent": STATE["tak_sent"],
+        "tak_messages_dropped": STATE["tak_dropped"],
         "alerts": len(STATE["alerts"]),
         "reviews": len(STATE["reviews"]),
     }
 
 
+async def _send(c: WebSocket, msg: str):
+    try:
+        await asyncio.wait_for(c.send_text(msg), SEND_TIMEOUT_S)
+    except Exception:  # gone, or too slow: drop it; the app reconnects and catches up
+        clients.discard(c)
+
+
 async def broadcast(msg: str):
-    for c in list(clients):
-        try:
-            await c.send_text(msg)
-        except Exception:
-            clients.discard(c)
+    """To every operator at once, so one slow tablet does not delay the others."""
+    await asyncio.gather(*(_send(c, msg) for c in list(clients)))
 
 
 async def broadcaster():
     while True:
-        msg = await queue.get()
-        on_frame(msg)
-        await broadcast(msg)
+        for out in on_frame(await queue.get()):
+            await broadcast(out)
 
 
 async def replay(path: str, rate: float):
@@ -246,7 +311,8 @@ def ros_thread(loop):
     class Bridge(Node):
         def __init__(self):
             super().__init__("web_bridge")
-            self.create_subscription(String, "tracks_geo", lambda m: loop.call_soon_threadsafe(_offer, m.data), 10)
+            for topic in ARGS.camera_topics:  # one per camera: tracks_geo, or /rgb/tracks_geo /thermal/tracks_geo
+                self.create_subscription(String, topic, lambda m: loop.call_soon_threadsafe(_offer, m.data), 10)
             pub = self.create_publisher(String, "alert_reviews", 10)
             STATE["ros_pub"] = lambda text: pub.publish(String(data=text))
 
@@ -276,6 +342,11 @@ def parse_args(argv=None):
         default=None,
         help=f"browser origin allowed to connect (repeatable); default {', '.join(DEFAULT_ORIGINS)}",
     )
+    ap.add_argument("--camera-topics", nargs="+", default=["tracks_geo"],
+                    help="--ros: one tracks_geo topic per camera, e.g. /rgb/tracks_geo /thermal/tracks_geo")  # fmt: skip
+    ap.add_argument("--fuse-radius", type=float, default=5.0,
+                    help="m: alerts from different cameras this close (and --fuse-window s apart) are one alert")  # fmt: skip
+    ap.add_argument("--fuse-window", type=float, default=30.0)
     ap.add_argument("--ssl-certfile", help="TLS certificate: serve wss:// instead of ws://")
     ap.add_argument("--ssl-keyfile", help="TLS private key")
     a = ap.parse_args(argv)

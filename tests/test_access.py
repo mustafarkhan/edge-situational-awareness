@@ -57,19 +57,20 @@ def test_loopback():
 
 
 def test_review_messages_are_validated():
-    known = {3, 7}
-    assert parse_review({"type": "review", "track_id": 3, "decision": "reject"}, known) == (3, "reject")
-    assert parse_review({"type": "review", "track_id": 7, "decision": "confirm", "operator": "x"}, known) == (
-        7,
+    known = {"rgb-3", "thermal-7"}
+    assert parse_review({"type": "review", "uid": "rgb-3", "decision": "reject"}, known) == ("rgb-3", "reject")
+    assert parse_review({"type": "review", "uid": "thermal-7", "decision": "confirm", "operator": "x"}, known) == (
+        "thermal-7",
         "confirm",
     )
     for bad in (
-        {"type": "review", "track_id": 99, "decision": "reject"},  # unknown alert
-        {"type": "review", "track_id": "3", "decision": "reject"},  # wrong type
-        {"type": "review", "track_id": True, "decision": "reject"},  # bool is an int in Python
-        {"type": "review", "track_id": 3, "decision": "delete"},
-        {"type": "auth", "track_id": 3, "decision": "reject"},
-        ["review", 3, "reject"],
+        {"type": "review", "uid": "rgb-99", "decision": "reject"},  # unknown alert
+        {"type": "review", "uid": 3, "decision": "reject"},  # wrong type
+        {"type": "review", "track_id": 3, "decision": "reject"},  # the old form
+        {"type": "review", "uid": "rgb-3" + "x" * 80, "decision": "reject"},  # too long
+        {"type": "review", "uid": "rgb-3", "decision": "delete"},
+        {"type": "auth", "uid": "rgb-3", "decision": "reject"},
+        ["review", "rgb-3", "reject"],
         None,
     ):
         assert parse_review(bad, known) is None

@@ -39,13 +39,20 @@ def wait_port(port: int, timeout: float = 20.0):
 
 
 def replay_file(path: Path):
+    """An RGB camera and a thermal camera on one drone. The RGB camera sees a person whose label carries script; the
+    thermal camera sees the same person 2 m away (its own track ID, 4) and, 60 m away, a second person."""
     det = {"track_id": 7, "label": PAYLOAD, "conf": 0.9, "lat": LAT, "lon": LON}
     alert = {**det, "message": f"{PAYLOAD} detected (track 7)"}
+    same = {"track_id": 4, "label": "person", "conf": 0.8, "lat": LAT + 2 / 111_320, "lon": LON}
+    other = {"track_id": 5, "label": "person", "conf": 0.8, "lat": LAT + 60 / 111_320, "lon": LON}
     with path.open("w") as fh:
         for i in range(400):
-            rec = {"frame": i, "t": i * 0.1, "fps": 10.0, "drone": {"lat": LAT, "lon": LON}, "detections": [det],
+            rgb = {"frame": i, "camera": "rgb", "fps": 10.0, "drone": {"lat": LAT, "lon": LON}, "detections": [det],
                    "alerts": [alert] if i == 2 else []}  # fmt: skip
-            fh.write(json.dumps(rec) + "\n")
+            thermal = {"frame": i + 1, "camera": "thermal", "fps": 10.0, "detections": [same, other],
+                       "alerts": ([{**same, "message": "person detected (track 4)"}] if i == 4 else [])
+                       + ([{**other, "message": "person detected (track 5)"}] if i == 6 else [])}  # fmt: skip
+            fh.write(json.dumps(rgb) + "\n" + json.dumps(thermal) + "\n")
 
 
 def main() -> int:
@@ -111,6 +118,15 @@ def main() -> int:
             checks["token is removed from the address bar"] = "token" not in page.url
             page.wait_for_selector("button.reject", timeout=20_000)
             checks["alert arrives, label shown as text"] = PAYLOAD in page.inner_text("body")
+            page.wait_for_selector("text=seen by rgb + thermal", timeout=10_000)
+            page.wait_for_timeout(1500)
+            items = page.locator("ul.alerts li")
+            checks["same person on both cameras: one alert, marked seen by both"] = (
+                items.count() == 2 and page.locator(".cameras.both").count() == 1
+            )
+            checks["second person on the thermal camera: its own alert"] = (
+                "seen by thermal" in items.nth(0).inner_text()
+            )
 
             canvas = page.locator("canvas.maplibregl-canvas")
             box = canvas.bounding_box()
@@ -122,13 +138,14 @@ def main() -> int:
             checks["script in the label never ran"] = page.evaluate("window.__xss === undefined")
             checks["no <img> injected into the popup"] = page.locator(".maplibregl-popup-content img").count() == 0
 
-            page.locator("button.reject").first.click()
+            page.locator("li:has(.cameras.both) button.reject").click()  # reject the fused (script-label) alert
             page.wait_for_selector("li.reject", timeout=10_000)
             checks["no Content-Security-Policy violations"] = not csp_errors
             browser.close()
         time.sleep(0.5)
         recs = [json.loads(line) for line in reviews.read_text().splitlines()] if reviews.exists() else []
         checks["review logged for the token's operator"] = len(recs) == 1 and recs[0]["operator"] == "operator"
+        checks["review covers both cameras"] = bool(recs) and recs[0]["cameras"] == ["rgb", "thermal"]
         checks["audit log chain intact"] = AuditLog.verify(reviews)[0] if recs else False
     finally:
         for pr in procs:

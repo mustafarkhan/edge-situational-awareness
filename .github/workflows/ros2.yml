@@ -5,9 +5,9 @@ name: ROS 2
 on:
   push:
     branches: [main]
-    paths: ["ros2_ws/**", "src/esa/**", "tools/fly_mission.py", ".github/workflows/ros2.yml"]
+    paths: ["ros2_ws/**", "src/esa/**", "web/backend/**", "tools/fly_mission.py", ".github/workflows/ros2.yml"]
   pull_request:
-    paths: ["ros2_ws/**", "src/esa/**", "tools/fly_mission.py", ".github/workflows/ros2.yml"]
+    paths: ["ros2_ws/**", "src/esa/**", "web/backend/**", "tools/fly_mission.py", ".github/workflows/ros2.yml"]
   workflow_dispatch:
 
 jobs:
@@ -26,7 +26,7 @@ jobs:
         run: |
           python3 -m pip install --upgrade pip
           python3 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          python3 -m pip install "numpy<2" "opencv-python<4.12" ultralytics lap
+          python3 -m pip install "numpy<2" "opencv-python<4.12" ultralytics lap fastapi "uvicorn[standard]" websockets
           python3 -m pip install -e .
       - name: colcon build
         run: |
@@ -53,3 +53,5 @@ jobs:
           bags=("$BAGS"/sortie_*/*.db3 "$BAGS"/sortie_*/*.mcap)
           [ ${#bags[@]} -gt 0 ] || { echo "::error title=rosbag::no bag written"; ls -R "$BAGS"; exit 1; }
           echo "bag written: ${bags[*]}"
+      - name: RGB + thermal end to end through the ground station (one alert per person across cameras)
+        run: bash ros2_ws/test_dual.sh

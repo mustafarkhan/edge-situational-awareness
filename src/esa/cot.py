@@ -74,14 +74,16 @@ def event(
 def alert_event(alert: dict, drone_uid: str = "esa-drone-1", ce_m: float = 15.0, confirmed: bool = False, **kw) -> str:
     """CoT for an alert from esa.alerts.AlertManager (needs lat/lon). ce_m: position uncertainty radius."""
     status = "CONFIRMED by operator" if confirmed else "unconfirmed, awaiting operator review"
+    ref = alert.get("uid", alert["track_id"])  # camera-scoped ("thermal-5") from the ground station
+    seen = f"; seen by {' + '.join(alert['cameras'])}" if len(alert.get("cameras", [])) > 1 else ""
     return event(
-        uid=f"{drone_uid}-{alert['label']}-{alert['track_id']}",
+        uid=f"{drone_uid}-{alert['label']}-{ref}",
         cot_type=cot_type_for(alert["label"]),
         lat=alert["lat"],
         lon=alert["lon"],
         ce_m=ce_m,
-        callsign=f"{alert['label'].capitalize()} {alert['track_id']}{' ✓' if confirmed else ' ?'}",
-        remarks=f"{alert['message']} by drone {drone_uid}; {status}. Automatic detection, verify before acting.",
+        callsign=f"{alert['label'].capitalize()} {ref}{' ✓' if confirmed else ' ?'}",
+        remarks=f"{alert['message']} by drone {drone_uid}{seen}; {status}. Automatic detection, verify before acting.",
         extra={"link": {"uid": drone_uid, "relation": "p-p", "type": "a-f-A-M-H-Q"}},
         **kw,
     )

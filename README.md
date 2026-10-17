@@ -534,7 +534,12 @@ interface, not the camera: simulated flight says nothing about detection, which 
 the camera, and publishes `/status` once a second: `OK`, `DEGRADED` (telemetry stale, so no coordinates) or
 `NO_CAMERA`, with frame rate and dropped frames. `esa_dual.launch.py` runs one detector per camera of an RGB +
 thermal gimbal (own model and field of view each, shared telemetry and operator decisions) and can record every
-sortie to a rosbag. Both are tested in the ROS 2 workflow.
+sortie to a rosbag. The ground station takes both cameras (`--camera-topics`), gives every track a camera-scoped ID
+(`rgb-5`, `thermal-5`) and shows a person seen by both cameras as one alert, marked as such, with one TAK marker
+([`src/esa/fusion.py`](src/esa/fusion.py); 5 m, a starting value like the 3 m single-camera radius). TAK is sent
+from its own thread, so an unreachable TAK server cannot stall the map. All of this runs end to end in the ROS 2
+workflow: two camera topics, both detectors, the ground station and an operator client
+([`ros2_ws/test_dual.sh`](ros2_ws/test_dual.sh)).
 
 **What this is for.** Finding people who need help: on land, at sea, after disasters, and in conflict zones in the
 humanitarian sense of locating casualties and missing people for rescuers. It is not for targeting or surveillance;

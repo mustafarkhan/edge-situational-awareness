@@ -2,6 +2,12 @@
 
 ## v3.0.0-dev — towards field tests on real drones
 
+- **RGB + thermal through to the operator (audit F-3, F-4):** the ground station subscribes to every camera
+  (`--camera-topics`), gives tracks camera-scoped IDs (`rgb-5`, `thermal-5`; reviews and TAK markers use them),
+  and fuses alerts from different cameras within 5 m / 30 s into one alert marked "seen by rgb + thermal"
+  (`esa.fusion`). TAK is sent from a background thread with a bounded queue; operators are sent to in parallel
+  with a timeout, so a slow tablet or TAK server cannot stall the map. New end-to-end ROS test of the dual setup
+  (`ros2_ws/test_dual.sh`), browser test extended to two cameras
 - **Flight safety (audit F-1, F-2, F-5):** `esa.mission` checks every plan before upload and refuses it if a
   waypoint is less than 5 m under the 120 m ceiling, outside the geofence, or take-off/return-to-launch is missing.
   The autopilot is set to enforce the same limits: fence ceiling at 120 m (was search altitude + 30 m, i.e. 150 m),

@@ -75,7 +75,7 @@ Ground station, for a field team on a shared network:
 
 ```bash
 # one line per operator: '<name> <token>'; generate tokens with: python -c "from esa.access import new_token; print(new_token())"
-python web/backend/server.py --ros --operators ops.txt --host 0.0.0.0 \
+python web/backend/server.py --ros --camera-topics /rgb/tracks_geo /thermal/tracks_geo --operators ops.txt --host 0.0.0.0 \
     --ssl-certfile gcs.crt --ssl-keyfile gcs.key --allow-origin https://gcs.local:5173 --tak udp://239.2.3.1:6969
 ```
 

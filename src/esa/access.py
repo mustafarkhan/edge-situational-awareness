@@ -89,20 +89,20 @@ def is_loopback(host: str) -> bool:
     return host in ("127.0.0.1", "::1", "localhost")
 
 
-def parse_review(msg: object, known_track_ids) -> tuple[int, str] | None:
-    """(track_id, decision) for a well-formed review of a known alert, else None.
+def parse_review(msg: object, known_alert_uids) -> tuple[str, str] | None:
+    """(alert uid, decision) for a well-formed review of a known alert, else None.
 
     Only these two fields are read. Anything else the client sends (an operator name, coordinates, a label) is
     ignored: those come from the server's own records.
     """
     if not isinstance(msg, dict) or msg.get("type") != "review":
         return None
-    tid, decision = msg.get("track_id"), msg.get("decision")
-    if isinstance(tid, bool) or not isinstance(tid, int) or decision not in REVIEW_DECISIONS:
+    uid, decision = msg.get("uid"), msg.get("decision")
+    if not isinstance(uid, str) or len(uid) > 64 or decision not in REVIEW_DECISIONS:
         return None
-    if tid not in known_track_ids:
+    if uid not in known_alert_uids:
         return None
-    return tid, decision
+    return uid, decision
 
 
 class AuditLog:
