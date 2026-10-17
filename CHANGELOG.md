@@ -2,6 +2,12 @@
 
 ## v3.0.0-dev — towards field tests on real drones
 
+- **GPU-trained models:** sea, thermal and land detectors trained for 60-120 epochs on Kaggle (2× T4) and scored with
+  the same scripts on the same held-out sets (`scripts/gpu_scores.sh`): sea AP 0.266 → 0.325 (swimmer 0.185 → 0.222),
+  thermal 0.445 → 0.512, land (VisDrone val) 0.253 → 0.336, and 67% instead of 54% of objects found in the two
+  VisDrone sequences held out from training (`benchmarks/holdout_recall.py`). The sea and thermal models ship as
+  `models/sds_y11n_1280_gpu.pt` and `models/hit_y11n_640_gpu.pt` with model cards and are now the defaults; model
+  files are checked against `models/SHA256SUMS` in CI
 - **Demo video of the whole system** (`docs/video/make_demo.py`): plan, simulated sortie, safety refusal, sea and
   night detection, operator review, RGB + thermal fusion, TAK, engineering checks, and what is not done yet; built
   only from the repository's own outputs and results files. `tools/fly_mission.py --track` writes the flown track

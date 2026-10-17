@@ -7,9 +7,11 @@ What this project does not show yet, and where the model fails. Every failure be
 
 - **CPU only so far.** All speeds come from a 2-vCPU cloud VM without a GPU; repeated runs vary by about ±10%.
   They compare configurations; they are not Jetson performance. The Jetson table is still empty.
-- **Short fine-tunes.** Land: 3 CPU epochs at 640 px (the learning-rate warm-up spans the whole run). Sea: 4 CPU
-  epochs; life-saving appliances (the smallest class) are not detected at all yet (AP 0.000). Treat the numbers as a
-  lower bound on what fine-tuning gives.
+- **Training.** The shipped sea and thermal models and the land model were trained for 60-120 epochs on a free Kaggle
+  GPU (docs/KAGGLE.md); several analyses (failure analysis §6, INT8 §5, tracking §3 and §9, search planning §10, text
+  prompts §12) were measured with the earlier 3-5 epoch CPU models and have not been re-run. Life-saving appliances
+  (the smallest sea class) are still essentially not detected (AP 0.019). Only YOLO11n has been trained; larger models
+  and YOLO26 are untested.
 - **Two datasets, both small slices.** Land: VisDrone (Chinese cities). Sea: a 2,500-image training subset of
   SeaDronesSee (lakes and the North Sea, summer, mostly DJI cameras), images downscaled from 4K to 1920 px.
   Performance in Nordic winter, rough seas, at night or with thermal cameras is unknown.

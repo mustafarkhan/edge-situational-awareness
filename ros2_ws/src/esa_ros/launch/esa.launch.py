@@ -1,6 +1,6 @@
 """Detector node with live telemetry from MAVROS (PX4 / ArduPilot).
 
-  ros2 launch esa_ros esa.launch.py model:=weights/sds_y11n_ep4.pt source:=0 use_telemetry:=true
+  ros2 launch esa_ros esa.launch.py model:=models/sds_y11n_1280_gpu.pt source:=0 use_telemetry:=true
   ros2 launch esa_ros esa.launch.py image_topic:=/camera/image_raw use_telemetry:=true   # ROS camera driver
 
 For an RGB + thermal gimbal see esa_dual.launch.py.

@@ -1,10 +1,13 @@
 # Training on a free Kaggle GPU
 
-All models in this repo were trained for 3-5 epochs on a 2-vCPU machine. This page runs proper training (80-120
+The first models in this repo were trained for 3-5 epochs on a 2-vCPU machine. This page runs proper training (60-120
 epochs) on Kaggle's free GPU with one notebook: [`kaggle/esa_gpu_training.ipynb`](../kaggle/esa_gpu_training.ipynb).
 It downloads the three datasets itself, uses exactly the same splits as the repo, and saves `esa_gpu_results.zip`
 (weights and training logs, about 30 MB). Scoring happens outside Kaggle with the repo's own evaluation scripts, so
 the new numbers are comparable with every other number in the README.
+
+**First full run (2026-10-16, 3 h on 2× T4):** sea AP 0.266 → 0.325, thermal 0.445 → 0.512, land 0.253 → 0.336, all on
+the same held-out sets as before (`scripts/gpu_scores.sh`, README §2, §9, §13).
 
 ## Once: set up Kaggle (10 minutes)
 

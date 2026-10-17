@@ -283,6 +283,23 @@ Small-object AP is the metric that matters; overall mAP hides the problem.
   YOLOE-11m 0.285, fine-tuned 0.328 AP. Same ordering as at sea.
 - TAK: ground marker type a-u-G for land classes.
 
+### 2026-10-17 — GPU training (Kaggle, 2× T4)
+- **Change vs parent:** epochs only (3-5 CPU epochs -> 60-120 GPU epochs, early stop on val), plus one sea run trained
+  at 1280 px. Same data, splits and seed. Configs `configs/train/gpu/*.yaml`, notebook `kaggle/esa_gpu_training.ipynb`;
+  3 h on Kaggle. The notebook downloads only train/val images: the test sets never left this machine.
+- **Best epochs (val mAP50-95):** sea 640 px 48 of 73 (early stop), sea 1280 px 39 of 60, thermal 112 of 120, land 70 of 80.
+- **Sea (1,200 test images):** AP 0.266 -> 0.296 (640-trained, run at 1280) -> **0.325** (1280-trained); swimmer
+  0.185 -> 0.222; life-saving appliances 0.000 -> 0.019. Leakage grew: swimmer seen-vs-unseen gap +0.110 -> +0.149.
+- **Thermal (477 test images):** AP 0.445 -> **0.512**; day 0.338 -> 0.453, night 0.471 -> 0.525. Leakage grew too:
+  seen-vs-held-out +0.020 -> +0.072 (control +0.017).
+- **Land (VisDrone val, 548):** AP at 1280 0.253 -> **0.336**, AP small 0.182 -> 0.266; at 640 large-object AP back to
+  0.558 (COCO 0.576, 3 epochs 0.527). Val also picked the epoch, so new `benchmarks/holdout_recall.py` scores the 768
+  frames of the two sequences held out before training: 54% -> **67%** found (IoU >= 0.5, conf 0.25), precision 69% -> 71%.
+  On the 21 demo frames it counts 445 of 836 for the 3-epoch model, against 448 in the hand count of 2026-10-10
+  (matching order differs).
+- **Conclusion:** keep; GPU sea and thermal models become the defaults. Longer training memorises training scenery
+  more, so the leakage-controlled test sets matter more, not less. Re-run §10 planning with the new models next.
+
 ---
 
 ## Template

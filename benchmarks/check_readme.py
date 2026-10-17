@@ -45,6 +45,7 @@ def j(name: str, key: str, fmt: str = "{:.2f}") -> str:
 Z = "zeroshot.csv"
 SEA, SEA2 = "seadronessee.csv", "seadronessee_two_class.csv"
 pct = "{:.0f}%"
+HIT, HOLD = "hituav_shared.csv", "visdrone_holdout.csv"
 
 CLAIMS: list[tuple[str, list[str]]] = [
     # README line (unique text it contains), values it must contain
@@ -54,8 +55,29 @@ CLAIMS: list[tuple[str, list[str]]] = [
     ("| YOLO11s | COCO | 1280 |", [v(Z, {"tag": "y11s_1280"}, c) for c in ("AP50", "AP", "AP_small")]),
     ("| YOLO11n + SAHI", [v(Z, {"tag": "y11n_640_sahi640"}, c) for c in ("AP50", "AP", "AP_small")]),
     (
-        "| **YOLO11n** | **fine-tuned, 3 epochs** | **1280**",
+        "| YOLO11n | fine-tuned, 3 epochs | 1280 |",
         [v(Z, {"tag": "ft_y11n_1280"}, c) for c in ("AP50", "AP", "AP_small", "AP_large")],
+    ),
+    (
+        "| YOLO11n | trained 80 epochs on a GPU | 640 |",
+        [v(Z, {"tag": "gpu_y11n_640"}, c) for c in ("AP50", "AP", "AP_small", "AP_large")],
+    ),
+    (
+        "| **YOLO11n** | **trained 80 epochs on a GPU** | **1280**",
+        [v(Z, {"tag": "gpu_y11n_1280"}, c) for c in ("AP50", "AP", "AP_small", "AP_large")],
+    ),
+    (
+        "the GPU model **67%**",
+        [v(HOLD, {"tag": t, "sequence": "all"}, "recall", pct, 100) for t in ("ft_y11n_ep3", "gpu_y11n_640")]
+        + [v(HOLD, {"tag": t, "sequence": "all"}, "precision", pct, 100) for t in ("ft_y11n_ep3", "gpu_y11n_640")],
+    ),
+    (
+        "| What helps most?",
+        [
+            v(Z, {"tag": "y11n_640"}, "AP_small"),
+            v(Z, {"tag": "gpu_y11n_1280"}, "AP_small"),
+            v(Z, {"tag": "ft_y11n_1280"}, "AP_small"),
+        ],
     ),
     ("| YOLO11n | fine-tuned, 3 epochs | 640 |", [v(Z, {"tag": "ft_y11n_640"}, c) for c in ("AP50", "AP", "AP_small")]),
     # tracking (simulated flight)
@@ -86,8 +108,37 @@ CLAIMS: list[tuple[str, list[str]]] = [
         [v(SEA, {"tag": "ft_y11n_640"}, c) for c in ("AP", "AP_small", "AP_swimmer", "AP_boat")],
     ),
     (
-        "| **YOLO11n fine-tuned 4 epochs, 5 classes** | **1280** |",
+        "| YOLO11n fine-tuned 4 epochs, 5 classes | 1280 |",
         [v(SEA, {"tag": "ft_y11n_1280"}, c) for c in ("AP", "AP_small", "AP_swimmer", "AP_boat")],
+    ),
+    (
+        "| YOLO11n trained 100 epochs at 640 px on a GPU | 1280 |",
+        [v(SEA, {"tag": "gpu_y11n_640_at1280"}, c) for c in ("AP", "AP_small", "AP_swimmer", "AP_boat")],
+    ),
+    (
+        "| **YOLO11n trained 60 epochs at 1280 px on a GPU** | **1280** |",
+        [v(SEA, {"tag": "gpu_y11n_1280"}, c) for c in ("AP", "AP_small", "AP_swimmer", "AP_boat")],
+    ),
+    (
+        "at 1280: jetski 0.143 → 0.242",
+        [
+            v(SEA, {"tag": t}, c)
+            for t in ("ft_y11n_1280", "gpu_y11n_1280")
+            for c in ("AP_buoy", "AP_life_saving_appliances")
+        ],
+    ),
+    (
+        "Swimmer AP **0.027 → 0.222**",
+        [
+            v(SEA2, {"tag": "coco_y11n_640"}, "AP_swimmer"),
+            v(SEA, {"tag": "gpu_y11n_1280"}, "AP_swimmer"),
+            v(SEA2, {"tag": "coco_y11n_640"}, "AP_boat"),
+            v(SEA, {"tag": "gpu_y11n_1280"}, "AP_boat"),
+        ],
+    ),
+    (
+        "Longer training memorises more: the GPU model's swimmer AP",
+        [v(SEA, {"tag": t}, "AP_swimmer") for t in ("gpu_y11n_1280_seen", "gpu_y11n_1280")],
     ),
     # leakage
     ("| COCO model (control) |", [v(SEA2, {"tag": t}, "AP") for t in ("coco_y11n_1280", "coco_y11n_1280_seen")]),
@@ -159,9 +210,22 @@ CLAIMS: list[tuple[str, list[str]]] = [
         + [v("hituav_shared.csv", {"tag": t}, "AP") for t in ("coco_y11n_640_test_day", "coco_y11n_640_test_night")],
     ),
     (
-        "| **YOLO11n fine-tuned, 5 CPU epochs** |",
+        "| YOLO11n fine-tuned, 5 CPU epochs |",
         [v("hituav_shared.csv", {"tag": "ft_y11n_640_test"}, c) for c in ("AP", "AP_person", "AP_car", "AP_bicycle")]
         + [v("hituav_shared.csv", {"tag": t}, "AP") for t in ("ft_y11n_640_test_day", "ft_y11n_640_test_night")],
+    ),
+    (
+        "| **YOLO11n trained 120 epochs on a GPU** |",
+        [v(HIT, {"tag": "gpu_y11n_640_test"}, c) for c in ("AP", "AP_person", "AP_car", "AP_bicycle")]
+        + [v(HIT, {"tag": t}, "AP") for t in ("gpu_y11n_640_test_day", "gpu_y11n_640_test_night")],
+    ),
+    (
+        "GPU-trained **0.512**",
+        [v(HIT, {"tag": t}, "AP") for t in ("gpu_y11n_640_test", "gpu_y11n_640_test_night", "gpu_y11n_640_test_day")],
+    ),
+    (
+        "The GPU model memorises more: 0.584 seen",
+        [v(HIT, {"tag": t}, "AP") for t in ("gpu_y11n_640_seen", "gpu_y11n_640_test")],
     ),
     # v2: land search plan (thermal)
     (

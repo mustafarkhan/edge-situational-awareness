@@ -64,7 +64,7 @@ Pixhawk ──serial/USB──▶ MAVROS ──/mavros/global_position/*──�
 ros2 launch mavros apm.launch fcu_url:=/dev/ttyTHS1:921600        # or px4.launch
 ros2 launch esa_ros esa_dual.launch.py \
     rgb_topic:=/camera/rgb/image_raw thermal_topic:=/camera/thermal/image_raw \
-    rgb_model:=models/sds_y11n_ep4.engine thermal_model:=models/hit_y11n_ep5.engine \
+    rgb_model:=models/sds_y11n_1280_gpu.engine thermal_model:=models/hit_y11n_640_gpu.engine \
     thermal_hfov_deg:=<from datasheet> record:=true
 ```
 
