@@ -26,6 +26,7 @@ import numpy as np
 REPO = Path(__file__).resolve().parents[1]
 R = REPO / "benchmarks" / "results"
 sys.path.insert(0, str(REPO / "src"))
+from esa.mission import MAX_PLAN_ALT_M  # noqa: E402
 from esa.search import (  # noqa: E402
     Camera,
     DetectionCurve,
@@ -279,7 +280,7 @@ def main():
     hs = [
         r
         for r in table
-        if r["size_m"] == 0.5 and r["fps"] == a.fps[0] and r["in_measured_range"] and r["alt_m"] <= EU_MAX_ALT_M
+        if r["size_m"] == 0.5 and r["fps"] == a.fps[0] and r["in_measured_range"] and r["alt_m"] <= MAX_PLAN_ALT_M
     ]
     best = max(hs, key=lambda r: r["km2_h_at_pod80"])
     s = spacing_for_pod(best["sweep_width_m"], 0.8)

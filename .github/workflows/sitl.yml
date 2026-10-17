@@ -6,9 +6,9 @@ name: SITL flight
 on:
   push:
     branches: [main]
-    paths: ["tools/fly_mission.py", "scripts/sitl_fly.sh", "src/esa/search.py", "samples/*.plan", ".github/workflows/sitl.yml"]
+    paths: ["tools/fly_mission.py", "scripts/sitl_fly.sh", "src/esa/search.py", "src/esa/mission.py", "samples/*.plan", ".github/workflows/sitl.yml"]
   pull_request:
-    paths: ["tools/fly_mission.py", "scripts/sitl_fly.sh", "src/esa/search.py", "samples/*.plan", ".github/workflows/sitl.yml"]
+    paths: ["tools/fly_mission.py", "scripts/sitl_fly.sh", "src/esa/search.py", "src/esa/mission.py", "samples/*.plan", ".github/workflows/sitl.yml"]
   workflow_dispatch:
 
 env:
@@ -43,7 +43,7 @@ jobs:
           cp build/sitl/bin/arducopter ../ardupilot-sitl/
           cp Tools/autotest/default_params/copter.parm ../ardupilot-sitl/Tools/autotest/default_params/
       - name: Python dependencies
-        run: python -m pip install pymavlink
+        run: python -m pip install pymavlink && python -m pip install -e .
       - name: Fly the sea search mission
         run: |
           ARDUCOPTER=ardupilot-sitl/arducopter ARDUPILOT=ardupilot-sitl bash scripts/sitl_fly.sh samples/search_example.plan sitl_sea.json | grep -v "^autopilot: \|^reached item"

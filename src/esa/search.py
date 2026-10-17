@@ -24,6 +24,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from esa.mission import MAX_PLAN_ALT_M
+
 EARTH_M_PER_DEG_LAT = 111_320.0
 
 
@@ -180,11 +182,19 @@ def _item(seq: int, command: int, params: list, frame: int = 3, alt: float | Non
 
 
 def qgc_plan(
-    pts: list[tuple[float, float]], alt_m: float, speed_mps: float, fence_margin_m: float | None = 50.0
+    pts: list[tuple[float, float]],
+    alt_m: float,
+    speed_mps: float,
+    fence_margin_m: float | None = 50.0,
+    max_alt_m: float = MAX_PLAN_ALT_M,
 ) -> dict:
     """QGroundControl mission (.plan JSON) for PX4 or ArduPilot: take off, fly the waypoints at `alt_m` above home,
     return to launch. With `fence_margin_m`, an inclusion geofence around the search area (plus that margin) is added:
-    the autopilot's own failsafe then stops the drone leaving the approved area, whatever the software above it does."""
+    the autopilot's own failsafe then stops the drone leaving the approved area, whatever the software above it does.
+    Plans above `max_alt_m` are refused rather than written: by default 115 m, 5 m under the EU 120 m ceiling, so
+    normal altitude-hold overshoot does not breach the altitude fence (esa.mission.CEILING_MARGIN_M)."""
+    if not 0 < alt_m <= max_alt_m:
+        raise ValueError(f"search altitude {alt_m} m is outside (0, {max_alt_m}] m")
     lat0, lon0 = pts[0]
     items = [
         _item(1, 22, [0, 0, 0, None, lat0, lon0, alt_m], alt=alt_m),  # MAV_CMD_NAV_TAKEOFF

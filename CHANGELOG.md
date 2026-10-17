@@ -2,6 +2,14 @@
 
 ## v3.0.0-dev — towards field tests on real drones
 
+- **Flight safety (audit F-1, F-2, F-5):** `esa.mission` checks every plan before upload and refuses it if a
+  waypoint is less than 5 m under the 120 m ceiling, outside the geofence, or take-off/return-to-launch is missing.
+  The autopilot is set to enforce the same limits: fence ceiling at 120 m (was search altitude + 30 m, i.e. 150 m),
+  return-to-launch on breach, and a return altitude for the site instead of ArduCopter's 15 m default (`RTL_ALT_M`
+  on ArduCopter 4.7+, `RTL_ALT` before; PX4 `GF_*`/`RTL_RETURN_ALT`). Settings are read back. SITL now flies whole
+  sorties to landing and checks the highest altitude. Found in SITL: a plan at exactly 120 m breached the fence on
+  normal overshoot, hence the 5 m margin; the land example now flies the 45° lens at 60 m (0.99 km²/h, vs 0.98 for
+  the 25° lens at 110 m). Mission tool split into tested functions.
 - **Ground-station security (audit S-1, S-2, S-9):** every WebSocket client authenticates with an operator token
   before receiving anything; browser origins are checked; the server listens locally unless told otherwise and
   serves TLS when given a certificate; decisions are attributed server-side and kept in a hash-chained audit log;

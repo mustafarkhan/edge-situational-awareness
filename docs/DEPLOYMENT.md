@@ -26,7 +26,12 @@ the crew knows when they are searching by eye alone.
 Missions come from `benchmarks/search_planning.py` (sea) or `benchmarks/land_search.py` (land, night): a
 QGroundControl `.plan` with take-off, the search pattern at the chosen altitude and speed, return to launch, and an
 inclusion geofence 50 m around the search box. Open it in QGroundControl, check it, and upload it from there, or
-upload it with `tools/fly_mission.py --connect ... --plan ...` (upload only on a real vehicle).
+upload it with `tools/fly_mission.py --connect ... --plan ... --rtl-alt <m>` (upload only on a real vehicle). The
+tool refuses plans less than 5 m under the 120 m ceiling, sets the autopilot's fence ceiling to 120 m with
+return-to-launch on breach, and sets the return altitude. Choose `--rtl-alt` from the site survey: above the
+tallest obstacle between the search area and home, plus margin. If QGroundControl uploads the mission instead,
+set the same parameters there (ArduCopter: `FENCE_ALT_MAX`, `FENCE_ACTION`, `RTL_ALT_M`; PX4: `GF_MAX_VER_DIST`,
+`GF_ACTION`, `RTL_RETURN_ALT`).
 
 ## 2. Hardware
 
@@ -99,8 +104,8 @@ This is a checklist, not legal advice; the university's drone operations lead an
   partner outside the EU, goes through the university's export-control office first.
 * **Insurance** for the aircraft and third-party liability, per the university's rules.
 
-The software helps with compliance but does not replace it: the planner caps altitude at the EU 120 m limit and
-writes a geofence, and the flight log (rosbag) records what was flown.
+The software helps with compliance but does not replace it: plans stay 5 m under the EU 120 m limit, the autopilot's
+fence ceiling is set to 120 m, the planner writes a geofence, and the flight log (rosbag) records what was flown.
 
 ## 4. Where this system is meant to be used
 

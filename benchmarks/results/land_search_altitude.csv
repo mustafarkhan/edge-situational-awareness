@@ -3,11 +3,13 @@ lens,hfov_deg,alt_m,px_on_person,in_measured_range,p_per_pass,footprint_m,sweep_
 "XT2 25 mm (25° lens, HIT-UAV camera)",25.0,60,22.7,True,0.953,26.6,25.3,0.567
 "XT2 25 mm (25° lens, HIT-UAV camera)",25.0,80,17.0,True,0.906,35.5,32.1,0.719
 "XT2 25 mm (25° lens, HIT-UAV camera)",25.0,100,13.6,True,0.905,44.3,40.1,0.898
+"XT2 25 mm (25° lens, HIT-UAV camera)",25.0,110,12.4,True,0.896,48.8,43.7,0.977
 "XT2 25 mm (25° lens, HIT-UAV camera)",25.0,120,11.3,True,0.876,53.2,46.6,1.043
 "XT2 25 mm (25° lens, HIT-UAV camera)",25.0,150,9.1,False,0.685,66.5,45.5,1.019
 XT2 13 mm (45° lens),45.0,40,18.2,True,0.92,33.1,30.5,0.682
 XT2 13 mm (45° lens),45.0,60,12.1,True,0.891,49.7,44.3,0.991
 XT2 13 mm (45° lens),45.0,80,9.1,False,0.687,66.3,45.5,1.019
 XT2 13 mm (45° lens),45.0,100,7.3,False,0.55,82.8,45.5,1.019
+XT2 13 mm (45° lens),45.0,110,6.6,False,0.5,91.1,45.5,1.019
 XT2 13 mm (45° lens),45.0,120,6.1,False,0.458,99.4,45.5,1.019
 XT2 13 mm (45° lens),45.0,150,4.9,False,0.367,124.3,45.5,1.019
