@@ -1,9 +1,11 @@
-"""The v3 demo video: the whole system, from the search plan to the operator, built only from real outputs.
+"""The v3 project video: the whole system, from the search plan to the operator, built only from real outputs.
 
   python docs/video/make_demo.py --sitl-track out/sitl_sea_track.csv --sitl-report out/sitl_sea.json \
+      --land-track out/sitl_land_track.csv --land-report out/sitl_land.json \
       --refusal out/refusal.txt --review-clip out/review_v3.mp4 --dual-clip out/dual_v3.mp4 \
-      --sea-clip outputs/sea_mot/DJI_0055 --sea-run outputs/sea_track_DJI_0055_bytetrack.jsonl \
-      --thermal-dir datasets/hituav_yolo --out outputs/demo_v3.mp4
+      --sea-clip outputs/sea_mot/DJI_0055 --sea-run outputs/gpu_track/sea_track_DJI_0055_bytetrack.jsonl \
+      --thermal-dir datasets/hituav_yolo --land-dir datasets/demo_holdout --land-model weights/vis_y11n_640_gpu.pt \
+      --out outputs/project_v3.mp4            # add --short for the 75-second cut
 
 Inputs come from the repository's own tools: scripts/sitl_fly.sh (simulated flight + track), tools/fly_mission.py
 (the refusal), tools/screenshot_review.py (operator sessions), tools/detect_video.py (tracking), and
@@ -42,11 +44,13 @@ from make_video import (  # noqa: E402
     canvas,
     fit,
     footer,
+    mpl_dark,
 )
 from PIL import Image  # noqa: E402
 from sea_scenes import scene_sea_track  # noqa: E402
 
 from esa.cot import alert_event  # noqa: E402
+from esa.mission import MAX_PLAN_ALT_M  # noqa: E402
 
 FPS = 30
 GREEN, BLUE = (102, 187, 106), (66, 165, 245)
@@ -88,7 +92,7 @@ def scene_title(repo_url):
     d.text((120, 300), "Drone search and rescue", font=F_H1, fill=FG)
     d.text((120, 395), "that rescuers can plan with", font=F_H1, fill=ACCENT)
     d.rectangle([120, 520, 320, 526], fill=ACCENT)
-    d.text((120, 570), "Land, sea and night · RGB + thermal · PX4 / ArduPilot · built for NVIDIA Jetson",
+    d.text((120, 570), "Land, sea and night · RGB + thermal · plans flown in simulation · built for NVIDIA Jetson",
            font=F_SMALL, fill=FG)  # fmt: skip
     d.text((120, 620), "Open source · every number checked against its results file in CI", font=F_SMALL, fill=MUTED)
     d.text((120, 940), repo_url, font=F_SMALL, fill=MUTED)
@@ -176,7 +180,8 @@ class MissionMap:
             d.ellipse([x - 11, y - 11, x + 11, y + 11], fill=BG, outline=ACCENT, width=4)
 
 
-def mission_frames(plan, track, report, seconds=14.0):
+def mission_frames(plan, track, report, seconds=14.0, title="Plan, upload, fly: the whole sortie in ArduPilot's simulator",
+                   note="samples/search_example.plan · ArduCopter 4.7.2 SITL · tools/fly_mission.py · flown in CI on every change"):  # fmt: skip
     mm = MissionMap(plan, track)
     n = int(seconds * FPS)
     tmax = float(track[-1]["t_s"])
@@ -188,7 +193,7 @@ def mission_frames(plan, track, report, seconds=14.0):
         idx.append(j)
     for f, i in enumerate(idx):
         im, d = canvas()
-        d.text((60, 40), "Plan, upload, fly: the whole sortie in ArduPilot's simulator", font=F_H2, fill=FG)
+        d.text((60, 40), title, font=F_H2, fill=FG)
         mm.draw(d, i)
         p = track[i]
         px = 1340
@@ -213,10 +218,7 @@ def mission_frames(plan, track, report, seconds=14.0):
                 d.text((px, y), "✓", font=F_BODY, fill=GREEN)
                 d.text((px + 45, y), ln, font=F_SMALL, fill=FG)
                 y += 52
-        footer(
-            d,
-            "samples/search_example.plan · ArduCopter 4.7.2 SITL · tools/fly_mission.py · flown in CI on every change",
-        )
+        footer(d, note)
         yield im
 
 
@@ -246,29 +248,82 @@ def scene_safety(refusal: str, settings: dict):
     return im
 
 
-def scene_thermal(images: list[Path], model_path: Path, ap_note: str):
+PEOPLE = {"person", "pedestrian", "people", "swimmer"}
+
+
+def scene_detect(title, images: list[Path], model_path: Path, imgsz: int, captions: list[str], lines: list[str],
+                 note: str, conf: float = 0.3):  # fmt: skip
+    """Three images side by side with the model's boxes: people in red, everything else in blue."""
+    from PIL import ImageDraw
     from ultralytics import YOLO
 
     model = YOLO(str(model_path))
     im, d = canvas()
-    d.text((60, 40), "At night: the thermal model", font=F_H2, fill=FG)
+    d.text((60, 40), title, font=F_H2, fill=FG)
     x = 60
-    for p in images:
+    for p, cap in zip(images, captions):
         src = Image.open(p).convert("RGB")
-        r = model.predict(str(p), imgsz=640, conf=0.3, verbose=False)[0]
+        r = model.predict(str(p), imgsz=imgsz, conf=conf, verbose=False)[0]
         tile, s = fit(src, 580, 470)
-        from PIL import ImageDraw
-
         td = ImageDraw.Draw(tile)
         for (x1, y1, x2, y2), c in zip(r.boxes.xyxy.tolist(), r.boxes.cls.int().tolist()):
-            col = ALERT if r.names[c] == "person" else BLUE
-            td.rectangle([x1 * s, y1 * s, x2 * s, y2 * s], outline=col, width=3)
+            col = ALERT if r.names[c] in PEOPLE else BLUE
+            td.rectangle([x1 * s, y1 * s, x2 * s, y2 * s], outline=col, width=2)
         im.paste(tile, (x, 170))
-        d.text((x, 660), p.stem.split("_")[1] + " m altitude", font=F_TINY, fill=MUTED)
+        d.text((x, 660), cap, font=F_TINY, fill=MUTED)
         x += 610
-    text_block(d, (60, 740), [ap_note, "People in red, vehicles in blue · night test images from held-out flights"],
-               fnt=F_SMALL, gap=56)  # fmt: skip
-    footer(d, "HIT-UAV (public, CC0) · flight-disjoint split · models/hit_y11n_ep5.pt (5 CPU epochs)")
+    text_block(d, (60, 740), lines, fnt=F_SMALL, gap=56)
+    footer(d, note)
+    return im
+
+
+def scene_results(R: Path):
+    """Detection on held-out data: the first CPU fine-tunes against the GPU-trained models, all three domains."""
+    plt = mpl_dark()
+    z = pd.read_csv(R / "zeroshot.csv").drop_duplicates("tag", keep="last").set_index("tag")
+    sea = pd.read_csv(R / "seadronessee.csv").drop_duplicates(["tag", "split"], keep="last").set_index("tag")
+    hit = pd.read_csv(R / "hituav_shared.csv").drop_duplicates("tag", keep="last").set_index("tag")
+    groups = ["Land, by day\n(VisDrone)", "At sea\n(SeaDronesSee)", "Night, thermal\n(HIT-UAV)"]
+    before = [z.loc["ft_y11n_1280", "AP"], sea.loc["ft_y11n_1280", "AP"], hit.loc["ft_y11n_640_test", "AP"]]
+    after = [z.loc["gpu_y11n_1280", "AP"], sea.loc["gpu_y11n_1280", "AP"], hit.loc["gpu_y11n_640_test", "AP"]]
+    fig, ax = plt.subplots(figsize=(11.5, 7.6))
+    xs, w = range(3), 0.38
+    for off, vals, col, lab in ((-w / 2, before, "#5c6670", "3-5 CPU epochs"), (w / 2, after, "#ffc400",
+                                "60-120 GPU epochs")):  # fmt: skip
+        bars = ax.bar([x + off for x in xs], vals, w * 0.94, color=col, label=lab)
+        for b, val in zip(bars, vals):
+            ax.text(b.get_x() + b.get_width() / 2, val + 0.01, f"{val:.3f}", ha="center", fontsize=18)
+    ax.set_xticks(list(xs), groups)
+    ax.set_ylabel("COCO AP on held-out images")
+    ax.set_ylim(0, max(after) * 1.25)
+    ax.legend(loc="upper left")
+    ax.grid(axis="y", alpha=0.2)
+    fig.tight_layout()
+    tmp = Path(tempfile.gettempdir()) / "esa-results.png"
+    fig.savefig(tmp, facecolor=fig.get_facecolor(), dpi=100)
+    plt.close(fig)
+    hold = pd.read_csv(R / "visdrone_holdout.csv").drop_duplicates(["tag", "sequence"], keep="last")
+    h = {t: hold[(hold.tag == t) & (hold.sequence == "all")].iloc[0] for t in ("ft_y11n_ep3", "gpu_y11n_640")}
+    al = {f: pd.read_csv(R / f).query("clip == 'all' and dedupe_radius_m == 3").iloc[0]
+          for f in ("alert_load.csv", "alert_load_gpu.csv")}  # fmt: skip
+    env = pd.read_csv(R / "land_detection_by_altitude_hit_y11n_640_gpu.csv").set_index("alt_m").loc["<=115"]
+    im, d = canvas()
+    d.text((60, 40), "Detection, measured on data the models never saw", font=F_H2, fill=FG)
+    ch = Image.open(tmp).convert("RGB")
+    ch.thumbnail((1150, 800))
+    im.paste(ch, (40, 140))
+    text_block(d, (1240, 180), [
+        f"Land, held-out video: {h['ft_y11n_ep3'].recall:.0%} → {h['gpu_y11n_640'].recall:.0%} of objects found",
+        f"Sea, real clips: {al['alert_load.csv'].unique_swimmers_alerted} → "
+        f"{al['alert_load_gpu.csv'].unique_swimmers_alerted} of {al['alert_load_gpu.csv'].labelled_swimmers} "
+        "swimmers raise an alert",
+        f"Night, ≤ 115 m: {float(env.recall):.0%} of people found, {float(env.false_alarms_per_image):.2f} false "
+        "alarms per image",
+        "",
+        "Weak spots stay in the README: life rings, people mislabelled as cars at 130 m at night",
+    ], fnt=F_SMALL, gap=50, width=640)  # fmt: skip
+    footer(d, "Same test sets and scripts before and after · test images never uploaded for training · "
+              "every number checked in CI")  # fmt: skip
     return im
 
 
@@ -312,6 +367,7 @@ def scene_engineering(n_tests: int, n_numbers: int):
         "Both search missions flown take-off to landing in ArduPilot's simulator",
         "Alerts delivered to a real TAK server",
         f"{n_numbers} numbers in the README checked against their results files",
+        "Model files checksummed; CI actions pinned and read-only; a security policy",
     ])  # fmt: skip
     footer(
         d, "GitHub Actions: CI, ROS 2, SITL flight · branches and pull requests only · security audit fixes S-1 S-2 S-9"
@@ -338,7 +394,19 @@ def clip_segment(src: Path, out: Path, title: str, note: str, max_s: float | Non
          "-r", str(FPS), "-c:v", "libx264", "-crf", "20", "-an", str(out)])  # fmt: skip
 
 
-def stills_segment(frames: list[tuple[Image.Image, float]], out: Path, work: Path):
+def held(frames, last_s: float):
+    """Each frame for one video frame; the last one held for `last_s` seconds. Streams: one image in memory."""
+    prev = None
+    for f in frames:
+        if prev is not None:
+            yield prev, 1 / FPS
+        prev = f
+    if prev is not None:
+        yield prev, last_s
+
+
+def stills_segment(frames, out: Path, work: Path):
+    """(image, seconds) pairs, from a list or a generator; each image is written to disk as soon as it arrives."""
     lst = work / f"{out.stem}.txt"
     with lst.open("w") as fh:
         for i, (img, secs) in enumerate(frames):
@@ -355,15 +423,21 @@ def main():
     ap.add_argument("--sitl-track", required=True)
     ap.add_argument("--sitl-report", required=True)
     ap.add_argument("--plan", default=str(REPO / "samples/search_example.plan"))
+    ap.add_argument("--land-track", required=True)
+    ap.add_argument("--land-report", required=True)
+    ap.add_argument("--land-plan", default=str(REPO / "samples/land_search_example.plan"))
     ap.add_argument("--refusal", required=True)
     ap.add_argument("--review-clip", required=True)
     ap.add_argument("--dual-clip", required=True)
     ap.add_argument("--sea-clip", required=True)
     ap.add_argument("--sea-run", required=True)
-    ap.add_argument("--sea-tag", default="sea_DJI_0055_bytetrack")
+    ap.add_argument("--sea-tag", default="sea_DJI_0055_bytetrack_gpu")
     ap.add_argument("--thermal-dir", required=True)
+    ap.add_argument("--land-dir", required=True, help="held-out VisDrone frames (datasets/demo_holdout)")
+    ap.add_argument("--land-model", required=True, help="VisDrone GPU model (not distributed: no dataset licence)")
     ap.add_argument("--repo-url", default="github.com/mustafarkhan/edge-situational-awareness")
-    ap.add_argument("--out", default=str(REPO / "outputs/demo_v3.mp4"))
+    ap.add_argument("--short", action="store_true", help="the 75-second cut")
+    ap.add_argument("--out", default=str(REPO / "outputs/project_v3.mp4"))
     a = ap.parse_args()
 
     R = REPO / "benchmarks/results"
@@ -371,6 +445,7 @@ def main():
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir()
     segs: list[Path] = []
+    short = a.short
 
     def stills(name, frames):
         out = work / f"{len(segs):02d}_{name}.mp4"
@@ -382,95 +457,128 @@ def main():
         clip_segment(Path(src), out, title, note, max_s)
         segs.append(out)
 
-    # 1-3: the question and the plan
+    def load_track(path):
+        return [{**r, **{k: float(r[k]) for k in ("t_s", "lat", "lon", "alt_m")}} for r in csv.DictReader(open(path))]
+
+    # the question, and what the detectors measure on held-out data
+    stills("intro", [(scene_title(a.repo_url), 4 if short else 5)] + ([] if short else [(scene_question(), 9)]))
+    stills("results", [(scene_results(R), 9 if short else 11)])
+
+    # the plan: sea by day, land at night
     alt = pd.read_csv(R / "search_altitude.csv")
     row = alt[(alt.size_m == 0.5) & (alt.fps == 4.0) & (alt.alt_m == 100)].iloc[0]
     row20 = alt[(alt.size_m == 0.5) & (alt.fps == 4.0) & (alt.alt_m == 20)].iloc[0]
     ex = json.loads((R / "search_example.json").read_text())["example"]
+    lex = json.loads((R / "land_search_example.json").read_text())
     land = pd.read_csv(R / "land_search_altitude.csv")
-    l45 = land[(land.hfov_deg == 45.0) & (land.alt_m == 60)].iloc[0]
-    stills("intro", [(scene_title(a.repo_url), 5), (scene_question(), 9)])
-    stills("plan", [
-        (scene_figure("How high to fly, from measured detection", REPO / "docs/figures/search_altitude.png", [
-            "At sea, by day (person's head and shoulders):",
-            f"{row20.km2_h_at_pod80:.2f} km² per hour at 20 m",
-            f"{row.km2_h_at_pod80:.2f} km² per hour at 100 m",
-            f"{row.p_per_pass:.2f} chance of detection per pass",
-            "",
-            f"Example: {ex['area_km2']} km² at {ex['alt_m']} m,",
-            f"{ex['tracks']} tracks {ex['track_spacing_m']:.0f} m apart, {ex['flight_min']:.0f} min, 80% POD",
-        ], "Detection curve measured on 4,221 unseen swimmers (SeaDronesSee) · benchmarks/search_planning.py"), 9),
-        (scene_figure("On land at night: the thermal lens sets the altitude", REPO / "docs/figures/land_search.png", [
-            f"45° lens at 60 m: {l45.km2_h_at_pod80:.2f} km² per hour",
-            f"{l45.p_per_pass:.2f} chance of detection per pass",
-            "",
-            "Planned 5 m under the 120 m ceiling.",
-        ], "HIT-UAV thermal (public) · benchmarks/land_search.py"), 7),
-    ])  # fmt: skip
+    lbest = land[land.alt_m == lex["alt_m"]].sort_values("km2_h_at_pod80").iloc[-1]
+    if not short:
+        stills("plan", [
+            (scene_figure("How high to fly, from measured detection", REPO / "docs/figures/search_altitude.png", [
+                "At sea, by day (person's head and shoulders):",
+                f"{row20.km2_h_at_pod80:.2f} km² per hour at 20 m",
+                f"{row.km2_h_at_pod80:.2f} km² per hour at 100 m",
+                f"{row.p_per_pass:.2f} chance of detection per pass",
+                "",
+                f"Example: {ex['area_km2']} km² at {ex['alt_m']} m,",
+                f"{ex['tracks']} tracks {ex['track_spacing_m']:.0f} m apart, {ex['flight_min']:.0f} min, 80% POD",
+            ], "Detection curve measured on 4,221 unseen swimmers (SeaDronesSee) · benchmarks/search_planning.py"), 9),
+            (scene_figure("On land at night: the thermal lens sets the altitude", REPO / "docs/figures/land_search.png", [
+                f"{lbest.hfov_deg:.0f}° lens at {lex['alt_m']} m:",
+                f"{lbest.km2_h_at_pod80:.2f} km² per hour",
+                f"{lbest.p_per_pass:.2f} chance of detection per pass",
+                "",
+                f"Example: {lex['area_km2']} km², {lex['tracks']} tracks,",
+                f"{lex['track_spacing_m']:.0f} m apart, {lex['flight_min']:.0f} min",
+                "",
+                "Planned 5 m under the 120 m ceiling.",
+            ], "HIT-UAV thermal (public) · GPU-trained thermal model · benchmarks/land_search.py"), 8),
+        ])  # fmt: skip
 
-    # 4-5: fly it, safely
-    plan = json.loads(Path(a.plan).read_text())
-    track = [
-        {**r, **{k: float(r[k]) for k in ("t_s", "lat", "lon", "alt_m")}} for r in csv.DictReader(open(a.sitl_track))
-    ]
+    # fly them, safely
     report = json.loads(Path(a.sitl_report).read_text())
-    frames = [(f, 1 / FPS) for f in mission_frames(plan, track, report)]
-    frames[-1] = (frames[-1][0], 3.0)  # hold the result
-    stills("mission", frames)
-    stills("safety", [(scene_safety(Path(a.refusal).read_text(), report["autopilot_settings"]), 9)])
+    stills("mission_sea", held(mission_frames(json.loads(Path(a.plan).read_text()), load_track(a.sitl_track), report,
+                                              seconds=9.0 if short else 13.0,
+                                              title="At sea: the whole sortie in ArduPilot's simulator"), 2.5))  # fmt: skip
+    if not short:
+        lrep = json.loads(Path(a.land_report).read_text())
+        stills("mission_land", held(mission_frames(
+            json.loads(Path(a.land_plan).read_text()), load_track(a.land_track), lrep, seconds=10.0,
+            title="On land at night: the thermal search, flown",
+            note="samples/land_search_example.plan · ArduCopter 4.7.2 SITL · flown in CI on every change"), 2.5))  # fmt: skip
+        stills("safety", [(scene_safety(Path(a.refusal).read_text(), report["autopilot_settings"]), 9)])
 
-    # 6-7: detect
+    # detect: sea, night, land by day
     tr = pd.read_csv(R / "tracking_sea.csv").drop_duplicates("tag", keep="last")
     summ = tr[tr.tag == a.sea_tag].iloc[0].to_dict()
     run_ = [json.loads(x) for x in Path(a.sea_run).read_text().splitlines()]
     clip_dir = Path(a.sea_clip)
     telem = [json.loads(x) for x in (clip_dir / "telemetry.jsonl").read_text().splitlines()]
     fr = sorted((clip_dir / "frames").iterdir())
-    sea = [(scene_sea_track(fp, rec, telem[rec["frame"]], summ, clip_dir.name, i, len(fr)), 1 / 15)
-           for i, (rec, fp) in enumerate(zip(run_, fr)) if i % 2 == 0]  # fmt: skip
+    step = 3 if short else 2
+    sea = ((scene_sea_track(fp, rec, telem[rec["frame"]], summ, clip_dir.name, i, len(fr)), step / 30)
+           for i, (rec, fp) in enumerate(zip(run_, fr)) if i % step == 0)  # fmt: skip
     stills("sea", sea)
-    hit = pd.read_csv(R / "hituav_shared.csv").drop_duplicates("tag", keep="last")
-    night = hit[hit.tag == "ft_y11n_640_test_night"].iloc[0]
-    coco_night = hit[hit.tag == "coco_y11n_640_test_night"].iloc[0]
-    imgs = sorted(Path(a.thermal_dir, "images/test").glob("1_*"))
+    hit = pd.read_csv(R / "hituav_shared.csv").drop_duplicates("tag", keep="last").set_index("tag")
+    imgs = [p for p in sorted(Path(a.thermal_dir, "images/test").glob("1_*"))
+            if int(p.stem.split("_")[1]) <= MAX_PLAN_ALT_M]  # night, inside the flight envelope  # fmt: skip
     picks = [imgs[len(imgs) * k // 3 + 5] for k in range(3)]
-    stills("thermal", [(scene_thermal(picks, REPO / "models/hit_y11n_ep5.pt",
-                                      f"Night AP {night.AP:.3f}, against {coco_night.AP:.3f} for a colour-trained model"),
-                        7)])  # fmt: skip
+    stills("thermal", [(scene_detect(
+        "At night: the thermal model", picks, REPO / "models/hit_y11n_640_gpu.pt", 640,
+        [p.stem.split("_")[1] + " m altitude" for p in picks],
+        [f"Night AP {hit.loc['gpu_y11n_640_test_night', 'AP']:.3f}, against "
+         f"{hit.loc['coco_y11n_640_test_night', 'AP']:.3f} for a colour-trained model",
+         "People in red, vehicles in blue · night test images from held-out flights, at or below 115 m",
+         "Above 120 m it labels many people as vehicles: a known weak spot (README §10b)"],
+        "HIT-UAV (public, CC0) · flight-disjoint split · models/hit_y11n_640_gpu.pt (120 GPU epochs)"), 6 if short else 7)])  # fmt: skip
+    limgs = sorted(Path(a.land_dir, "images").glob("*.jpg"))
+    lpicks = [limgs[len(limgs) * k // 3 + 5] for k in range(3)]
+    hold = pd.read_csv(R / "visdrone_holdout.csv").drop_duplicates(["tag", "sequence"], keep="last")
+    hrow = hold[(hold.tag == "gpu_y11n_640") & (hold.sequence == "all")].iloc[0]
+    stills("land", [(scene_detect(
+        "On land by day: people and vehicles", lpicks, Path(a.land_model), 1280,
+        [f"held-out sequence {p.stem.split('_')[0]}" for p in lpicks],
+        [f"{hrow.recall:.0%} of {int(hrow.objects):,} labelled objects found in two sequences removed before training",
+         "People in red, vehicles in blue"],
+        "VisDrone (research use; model not redistributed) · GPU-trained YOLO11n at 1280 px · "
+        "benchmarks/holdout_recall.py", conf=0.25), 6 if short else 7)])  # fmt: skip
 
-    # 8-10: the operator and the field team
+    # the operator and the field team
     clip("review", a.review_clip, "The operator decides: every alert is confirmed or rejected",
          "Real recorded sea flight replayed through the ground station · operator logged in with a token · "
-         "decisions in a tamper-evident log")  # fmt: skip
-    clip("dual", a.dual_clip, "RGB + thermal: one person, one alert",
-         "Integration-test replay (synthetic positions): the same person 2 m apart on both cameras is merged; "
-         "a second person stays separate")  # fmt: skip
+         "decisions in a tamper-evident log", max_s=12 if short else None)  # fmt: skip
+    if not short:
+        clip("dual", a.dual_clip, "RGB + thermal: one person, one alert",
+             "Integration-test replay (synthetic positions): the same person 2 m apart on both cameras is merged; "
+             "a second person stays separate")  # fmt: skip
     sample = {"track_id": 7, "uid": "rgb-7", "label": "person", "lat": 61.49, "lon": 23.735,
               "message": "person detected (track 7)", "cameras": ["rgb", "thermal"]}  # fmt: skip
-    stills("tak", [(scene_tak(sample), 8)])
+    stills("tak", [(scene_tak(sample), 6 if short else 8)])
 
-    # 11-13: how it is built, and what comes next
+    # how it is built, and what comes next
     n_tests = int(re.search(r"(\d+) tests? collected", subprocess.run(
         [sys.executable, "-m", "pytest", "--collect-only", "-q"], cwd=REPO, capture_output=True, text=True).stdout).group(1))  # fmt: skip
     n_numbers = int(re.search(r"\((\d+) numbers checked\)", subprocess.run(
         [sys.executable, "benchmarks/check_readme.py"], cwd=REPO, capture_output=True, text=True).stdout).group(1))  # fmt: skip
-    stills("end", [
-        (scene_engineering(n_tests, n_numbers), 9),
-        (scene_card("Next", "What has not been done yet", [
-            "Score the GPU-trained models (trained overnight; not yet evaluated)",
-            "Measure speed, power and INT8 accuracy on a Jetson Orin Nano",
-            "Field tests on a university drone, following the deployment plan",
-            "Publish measured sweep widths for AI drone detection: the benchmark",
-        ]), 8),
-        (scene_end(a.repo_url), 5),
-    ])  # fmt: skip
+    end = [(scene_end(a.repo_url), 5)]
+    if not short:
+        end = [
+            (scene_engineering(n_tests, n_numbers), 9),
+            (scene_card("Next", "What has not been done yet", [
+                "Measure speed, power and INT8 accuracy on a Jetson Orin Nano",
+                "Fix the night person/car confusion above 120 m; detect life rings and vests",
+                "Field tests on a university drone, following the deployment plan",
+                "Publish measured sweep widths for AI drone detection: the benchmark",
+            ]), 8),
+        ] + end  # fmt: skip
+    stills("end", end)
 
     lst = work / "segments.txt"
     lst.write_text("".join(f"file '{s}'\n" for s in segs))
     run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", a.out])
     dur = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", a.out],
                          capture_output=True, text=True).stdout.strip()  # fmt: skip
-    print(f"demo -> {a.out} ({float(dur):.1f} s)")
+    print(f"video -> {a.out} ({float(dur):.1f} s)")
 
 
 if __name__ == "__main__":

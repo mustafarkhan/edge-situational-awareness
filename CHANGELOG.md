@@ -2,6 +2,11 @@
 
 ## v3.0.0-dev — towards field tests on real drones
 
+- **Project video** (`docs/video/project_video.mp4`, 2.5 min; `--short` for a 1-minute cut): detection results
+  before and after GPU training, the sea and land plans flown in SITL, safety, sea tracking, thermal and land
+  detection with the shipped models, operator review, RGB + thermal fusion, TAK. Replaces the v2 demo video. The
+  README front page now says in one table what the system does on land, at sea, at night, in the air and for the
+  field team, each with a measured number checked in CI
 - **Sea tracking and alerts with the GPU model** on the four real SeaDronesSee-MOT clips: 20 of 24 swimmers get a
   swimmer alert instead of 17 (27 alerts instead of 18). On DJI_0057 the 4-epoch model called most swimmers boats
   (1 of 8 alerted); the GPU model alerts on 5 of 8. Class-agnostic tracking scores are mixed (IDF1 up on two clips,

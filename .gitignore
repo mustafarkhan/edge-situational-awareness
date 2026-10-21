@@ -37,6 +37,6 @@ ros2_ws/log/
 !models/sds_y11n_1280_gpu.pt
 !models/hit_y11n_640_gpu.pt
 !models/SHA256SUMS
-!docs/video/demo_video.mp4
+!docs/video/project_video.mp4
 !web/sample/*.jsonl
 !samples/*/telemetry.jsonl

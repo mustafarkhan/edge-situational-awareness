@@ -5,27 +5,31 @@
 [![SITL flight](https://github.com/mustafarkhan/edge-situational-awareness/actions/workflows/sitl.yml/badge.svg)](https://github.com/mustafarkhan/edge-situational-awareness/actions/workflows/sitl.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
-Detecting, tracking and geolocating people and vehicles (on land, by day and by thermal camera at night) and
-swimmers and boats (at sea) in drone video, planning the search and sending alerts to responders' TAK maps, built for
-embedded
-deployment (NVIDIA Jetson). Every number below was measured on public data, and each one links to
-the script and results file that produced it.
+Open-source drone search and rescue, from the search plan to the rescuer's map. It decides how high and where to
+fly, flies the plan through PX4 or ArduPilot, detects people, swimmers, boats and vehicles in colour and thermal video,
+places them on the map, lets an operator confirm or reject every alert, and sends confirmed ones to responders' TAK
+apps. Built for embedded deployment (NVIDIA Jetson). **Every number below was measured on public data the models never
+trained on, and CI checks each one against the results file that produced it.**
+
+🎬 **[Project video (2.5 min)](docs/video/project_video.mp4)**, rendered only from the repository's own outputs by
+[`docs/video/make_demo.py`](docs/video/make_demo.py).
+
+| | what it does | measured (held-out data) |
+|---|---|---|
+| **Land, by day** | people and vehicles, VisDrone | 67% of objects found in two video sequences removed before training (§2) |
+| **At sea** | swimmers and boats, SeaDronesSee | 20 of 24 swimmers on four real clips raise an alert (§9, §11) |
+| **At night** | people and vehicles, thermal (HIT-UAV) | 91% of people found at ≤ 115 m, 0.40 false alarms per image (§10b, §13) |
+| **In the air** | plan → upload → fly → land, ArduPilot SITL in CI | 14/14 and 48/48 search waypoints flown, never outside the geofence (§14) |
+| **To the field team** | operator review, RGB + thermal fusion, Cursor on Target | tested against a real TAK server in CI (§11) |
+
+> **Status (October 2026, v3).** Everything above is measured on datasets and in simulation; it has **not yet flown on
+> real hardware**. The detectors were trained for 60-120 epochs on a free GPU ([docs/KAGGLE.md](docs/KAGGLE.md)) and
+> scored on the same held-out sets as the first CPU models: AP +22% at sea, +15% on thermal, +32% on land.
+> [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) is the hardware, rules, safety and field-test plan.
+> **Next:** speed, power and INT8 on a Jetson Orin Nano ([one command](benchmarks/run_on_jetson.sh)), the thermal
+> model's person/car confusion above 120 m, life-ring detection, and field tests.
 
 ![Tracking on a simulated flight](docs/figures/tracking_demo.gif)
-
-🎬 **[Demo video (3 min)](docs/video/demo_video.mp4)**, rendered only from real outputs by `docs/video/make_video.py`.
-
-> **Status (October 2026, v2).** Land (VisDrone), sea (SeaDronesSee) and thermal (HIT-UAV) modules are done, measured
-> on CPU: detection, tracking on real footage, tilt-aware geolocation on real flight logs, INT8, failure analysis,
-> **search planning**, an **operator review loop with TAK (ATAK) output**, and **text-prompt search**. The ROS 2 node takes
-> live MAVROS telemetry and is tested end to end in CI.
-> **v3 (in progress): towards field tests.** Search missions now take off, return and carry a geofence, and are flown
-> end to end in ArduPilot's simulator in CI; the ROS node reads RGB and thermal camera topics and reports its own
-> health; [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) is the hardware, rules, safety and field-test plan (§14).
-> The three detectors have now been **trained properly on a GPU** (60-120 epochs, [docs/KAGGLE.md](docs/KAGGLE.md)) and
-> scored on the same held-out test sets: AP +22% at sea, +15% on thermal, +33% on land (§2, §9, §13).
-> **Still to come:** TensorRT on a Jetson Orin Nano (speed, watts, joules per frame) with
-> [one command](benchmarks/run_on_jetson.sh).
 
 ## Results at a glance
 
