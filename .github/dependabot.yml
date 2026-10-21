@@ -1,0 +1,18 @@
+# Weekly update PRs for pinned GitHub Actions and dependencies. Each one runs the full CI before it can be merged.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      actions: { patterns: ["*"] }
+  - package-ecosystem: npm
+    directory: /web/frontend
+    schedule: { interval: weekly }
+    groups:
+      frontend: { patterns: ["*"], update-types: [minor, patch] }
+  - package-ecosystem: pip
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      python: { patterns: ["*"], update-types: [minor, patch] }

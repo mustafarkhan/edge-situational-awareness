@@ -6,7 +6,7 @@
 2. Before every push, run the local checks and fix anything they report:
 
    ```bash
-   pip install ruff pytest actionlint-py shellcheck-py pre-commit
+   pip install ruff pytest actionlint-py shellcheck-py zizmor pre-commit
    pre-commit install          # fast checks on every commit
    bash scripts/check.sh       # everything CI checks that needs no GPU, ROS or simulator
    ```
@@ -29,3 +29,9 @@ Every number in the README comes from a results file produced by a script in thi
 `benchmarks/check_readme.py` checks that they match. A new claim needs its script, its results file and a
 `check_readme.py` entry in the same pull request. Results that have not been measured (for example on a Jetson
 or in the field) are described as not yet measured.
+
+## Dependencies and workflows
+
+GitHub Actions are pinned to full commit SHAs (the version is in a comment), every workflow runs with read-only
+repository access, and `zizmor` checks the workflow files in CI. Dependabot proposes weekly updates as pull requests;
+they go through the same checks as any other change. Model files are checked against `models/SHA256SUMS`.
