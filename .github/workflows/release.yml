@@ -1,10 +1,16 @@
 name: Release
 
-# Pushing a tag vX.Y.Z publishes a GitHub release: notes from docs/releases/vX.Y.Z.md, the shipped models with their
-# checksums, and the project videos. The models are verified against models/SHA256SUMS first.
+# Publishes a GitHub release: notes from docs/releases/vX.Y.Z.md, the shipped models with their checksums, and the
+# project videos. The models are verified against models/SHA256SUMS first. Either push a tag vX.Y.Z, or run this
+# workflow from the Actions tab with the version: it then tags the commit it runs on (the tip of main).
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version to release, e.g. v3.0.0 (needs docs/releases/<version>.md)"
+        required: true
 
 permissions:
   contents: read
@@ -24,8 +30,16 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+          EVENT: ${{ github.event_name }}
         run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a version: $TAG"; exit 1; }
           test -f "docs/releases/$TAG.md" || { echo "missing docs/releases/$TAG.md"; exit 1; }
-          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file "docs/releases/$TAG.md" \
+          if [ "$EVENT" = push ]; then
+            where=(--verify-tag)
+          else
+            [ "$GITHUB_REF" = refs/heads/main ] || { echo "run it on main"; exit 1; }
+            where=(--target "$GITHUB_SHA")
+          fi
+          gh release create "$TAG" "${where[@]}" --title "$TAG" --notes-file "docs/releases/$TAG.md" \
             models/*.pt models/SHA256SUMS docs/video/project_video.mp4 docs/video/project_video_short.mp4

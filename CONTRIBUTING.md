@@ -39,5 +39,6 @@ they go through the same checks as any other change. Model files are checked aga
 ## Releases
 
 Add `docs/releases/vX.Y.Z.md` (release notes) and date the changelog section in a pull request. After it is merged,
-tag the merge commit `vX.Y.Z` and push the tag: the Release workflow verifies the model checksums and publishes the
-release with the models and project videos attached.
+tag the merge commit `vX.Y.Z` and push the tag, or run the Release workflow from the Actions tab with the version
+(it tags the tip of `main`). The workflow verifies the model checksums and publishes the release with the models and
+project videos attached.
