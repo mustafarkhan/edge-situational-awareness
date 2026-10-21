@@ -105,12 +105,16 @@ def main():
         wait_port(8765)
         log: list[dict] = []
         asyncio.run(operator(8765, log))
-        time.sleep(2)
+        alert = log[0]
+        uid = f"esa-drone-1-swimmer-{alert['uid']}"  # camera-scoped: esa-drone-1-swimmer-rgb-<track>
+        # TAK messages go out from a background thread and through the TAK server: wait for the delete to arrive
+        # (up to 20 s on a slow runner) instead of a fixed pause
+        t0 = time.time()
+        while time.time() - t0 < 20 and not any('type="t-x-d-d"' in e and f'uid="{uid}"' in e for e in list(received)):
+            time.sleep(0.2)
         stop.set()
 
         types = [re.search(r'type="([^"]+)"', e).group(1) for e in received]
-        alert = log[0]
-        uid = f"esa-drone-1-swimmer-{alert['uid']}"  # camera-scoped: esa-drone-1-swimmer-rgb-<track>
         checks = {
             "drone position reached the TAK client": "a-f-A-M-H-Q" in types,
             "swimmer alert reached the TAK client": any(f'uid="{uid}"' in e and 'type="a-u-S"' in e for e in received),
@@ -120,6 +124,9 @@ def main():
         print(f"TAK client received {len(received)} events: {sorted(set(types))}")
         for k, v in checks.items():
             print(("OK   " if v else "FAIL ") + k)
+            if not v and os.environ.get("GITHUB_ACTIONS"):  # an annotation: readable without the full job log
+                print(f"::error title=TAK end to end::{k} failed; client received {len(received)} events: "
+                      f"{sorted(set(types))}")  # fmt: skip
         sample = next((e for e in received if f'uid="{uid}"' in e), "")
         print("example alert as received by the client:\n" + sample)
         return 0 if all(checks.values()) else 1
