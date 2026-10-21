@@ -47,7 +47,45 @@ SEA, SEA2 = "seadronessee.csv", "seadronessee_two_class.csv"
 pct = "{:.0f}%"
 HIT, HOLD = "hituav_shared.csv", "visdrone_holdout.csv"
 
+
+def gain(csv: str, where_before: dict, where_after: dict, col: str = "AP") -> str:
+    """Relative change between two rows, as the README writes it (+22%)."""
+    b, a = float(v(csv, where_before, col, "{}")), float(v(csv, where_after, col, "{}"))
+    return f"+{(a / b - 1):.0%}"
+
+
 CLAIMS: list[tuple[str, list[str]]] = [
+    # front page
+    ("| **Land, by day** |", [v(HOLD, {"tag": "gpu_y11n_640", "sequence": "all"}, "recall", "{:.0%}")]),
+    (
+        "| **At sea** |",
+        [
+            v("alert_load_gpu.csv", {"clip": "all", "dedupe_radius_m": 3}, c, "{:.0f}")
+            for c in ("unique_swimmers_alerted", "labelled_swimmers")
+        ],
+    ),
+    (
+        "| **At night** |",
+        [
+            v("land_detection_by_altitude_hit_y11n_640_gpu.csv", {"alt_m": "<=115"}, c, f)
+            for c, f in (("recall", "{:.0%}"), ("false_alarms_per_image", "{:.2f}"))
+        ],
+    ),
+    (
+        "| **In the air** |",
+        [
+            j(f, "waypoints_reached", "{:d}/") + j(f, "waypoints_planned", "{:d}")
+            for f in ("sitl_sea.json", "sitl_land.json")
+        ],
+    ),
+    (
+        "scored on the same held-out sets as the first CPU models",
+        [
+            gain(SEA, {"tag": "ft_y11n_1280"}, {"tag": "gpu_y11n_1280"}),
+            gain(HIT, {"tag": "ft_y11n_640_test"}, {"tag": "gpu_y11n_640_test"}),
+            gain(Z, {"tag": "ft_y11n_1280"}, {"tag": "gpu_y11n_1280"}),
+        ],
+    ),
     # README line (unique text it contains), values it must contain
     ("| YOLO11n | COCO | 640 | 0.200", [v(Z, {"tag": "y11n_640"}, c) for c in ("AP", "AP_small", "AP_large")]),
     ("| YOLO11n | COCO | 1280 |", [v(Z, {"tag": "y11n_1280"}, c) for c in ("AP50", "AP", "AP_small")]),
