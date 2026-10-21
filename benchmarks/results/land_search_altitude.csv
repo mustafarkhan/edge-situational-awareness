@@ -1,15 +1,15 @@
 lens,hfov_deg,alt_m,px_on_person,in_measured_range,p_per_pass,footprint_m,sweep_width_m,km2_h_at_pod80
-"XT2 25 mm (25° lens, HIT-UAV camera)",25.0,40,34.0,True,1.0,17.7,17.7,0.397
-"XT2 25 mm (25° lens, HIT-UAV camera)",25.0,60,22.7,True,0.953,26.6,25.3,0.567
-"XT2 25 mm (25° lens, HIT-UAV camera)",25.0,80,17.0,True,0.906,35.5,32.1,0.719
-"XT2 25 mm (25° lens, HIT-UAV camera)",25.0,100,13.6,True,0.905,44.3,40.1,0.898
-"XT2 25 mm (25° lens, HIT-UAV camera)",25.0,110,12.4,True,0.896,48.8,43.7,0.977
-"XT2 25 mm (25° lens, HIT-UAV camera)",25.0,120,11.3,True,0.876,53.2,46.6,1.043
-"XT2 25 mm (25° lens, HIT-UAV camera)",25.0,150,9.1,False,0.685,66.5,45.5,1.019
-XT2 13 mm (45° lens),45.0,40,18.2,True,0.92,33.1,30.5,0.682
-XT2 13 mm (45° lens),45.0,60,12.1,True,0.891,49.7,44.3,0.991
-XT2 13 mm (45° lens),45.0,80,9.1,False,0.687,66.3,45.5,1.019
-XT2 13 mm (45° lens),45.0,100,7.3,False,0.55,82.8,45.5,1.019
-XT2 13 mm (45° lens),45.0,110,6.6,False,0.5,91.1,45.5,1.019
-XT2 13 mm (45° lens),45.0,120,6.1,False,0.458,99.4,45.5,1.019
-XT2 13 mm (45° lens),45.0,150,4.9,False,0.367,124.3,45.5,1.019
+"XT2 25 mm (25° lens, HIT-UAV camera)",25.0,40,34.0,True,0.971,17.7,17.2,0.385
+"XT2 25 mm (25° lens, HIT-UAV camera)",25.0,60,22.7,True,0.966,26.6,25.7,0.575
+"XT2 25 mm (25° lens, HIT-UAV camera)",25.0,80,17.0,True,0.895,35.5,31.7,0.71
+"XT2 25 mm (25° lens, HIT-UAV camera)",25.0,100,13.6,True,0.773,44.3,34.3,0.766
+"XT2 25 mm (25° lens, HIT-UAV camera)",25.0,110,12.4,True,0.689,48.8,33.6,0.752
+"XT2 25 mm (25° lens, HIT-UAV camera)",25.0,120,11.3,True,0.589,53.2,31.3,0.701
+"XT2 25 mm (25° lens, HIT-UAV camera)",25.0,150,9.1,False,0.504,66.5,33.5,0.75
+XT2 13 mm (45° lens),45.0,40,18.2,True,0.924,33.1,30.6,0.685
+XT2 13 mm (45° lens),45.0,60,12.1,True,0.667,49.7,33.1,0.741
+XT2 13 mm (45° lens),45.0,80,9.1,False,0.506,66.3,33.5,0.75
+XT2 13 mm (45° lens),45.0,100,7.3,False,0.405,82.8,33.5,0.75
+XT2 13 mm (45° lens),45.0,110,6.6,False,0.368,91.1,33.5,0.75
+XT2 13 mm (45° lens),45.0,120,6.1,False,0.337,99.4,33.5,0.75
+XT2 13 mm (45° lens),45.0,150,4.9,False,0.27,124.3,33.5,0.75

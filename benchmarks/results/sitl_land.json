@@ -1,20 +1,20 @@
 {
- "waypoints_planned": 38,
- "waypoints_reached": 38,
- "track_points": 9066,
+ "waypoints_planned": 48,
+ "waypoints_reached": 48,
+ "track_points": 11086,
  "cross_track_m_median": 0.01,
- "cross_track_m_max": 1.11,
+ "cross_track_m_max": 1.15,
  "positions_outside_fence": 0,
- "max_alt_m": 60.0,
+ "max_alt_m": 100.0,
  "landed": true,
  "ok": true,
  "autopilot": "ArduPilot",
- "sim_wall_seconds": 226.9,
+ "sim_wall_seconds": 277.4,
  "autopilot_settings": {
   "FENCE_TYPE": 5,
   "FENCE_ALT_MAX": 120.0,
   "FENCE_ACTION": 1,
-  "RTL_ALT_M": 60.0,
+  "RTL_ALT_M": 100.0,
   "FENCE_ENABLE": 1
  }
 }

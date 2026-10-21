@@ -227,11 +227,39 @@ CLAIMS: list[tuple[str, list[str]]] = [
         "The GPU model memorises more: 0.584 seen",
         [v(HIT, {"tag": t}, "AP") for t in ("gpu_y11n_640_seen", "gpu_y11n_640_test")],
     ),
+    (
+        "labelled *person* on **",
+        [j("land_detection_summary.json", k, "{:.0%}") for k in ("recall", "recall_night", "recall_day", "precision")],
+    ),
+    (
+        "of people found at",
+        [
+            v(f"land_detection_by_altitude_{m}.csv", {"alt_m": "<=115"}, c, f)
+            for m in ("hit_y11n_640_gpu", "hit_y11n_ep5")
+            for c, f in (("recall", "{:.0%}"), ("false_alarms_per_image", "{:.2f}"))
+        ],
+    ),
+    (
+        "at 80 m the prediction matches",
+        [
+            v("land_search_validation.csv", {"alt_m": a}, c, "{:.2f}")
+            for a in (80, 120)
+            for c in ("p_predicted", "p_measured")
+        ],
+    ),
+    (
+        "do the planned searches fly?",
+        [
+            j(f, "waypoints_reached", "{:d}/") + j(f, "waypoints_planned", "{:d}")
+            for f in ("sitl_sea.json", "sitl_land.json")
+        ]
+        + [j(f, "cross_track_m_max", "{:.2f} m") for f in ("sitl_land.json",)],
+    ),
     # v2: land search plan (thermal)
     (
-        "| 25° (25 mm, the HIT-UAV camera) | 110 m |",
+        "| 25° (25 mm, the HIT-UAV camera) | 100 m |",
         [
-            v("land_search_altitude.csv", {"hfov_deg": 25.0, "alt_m": 110}, c, f)
+            v("land_search_altitude.csv", {"hfov_deg": 25.0, "alt_m": 100}, c, f)
             for c, f in (("px_on_person", "{:.0f} px"), ("p_per_pass", "{:.2f}"), ("km2_h_at_pod80", "{:.2f}"))
         ],
     ),
@@ -267,7 +295,7 @@ CLAIMS: list[tuple[str, list[str]]] = [
         )
         for anchor, f in (
             ("| sea, 100 m, 0.5 km²", "sitl_sea.json"),
-            ("| land at night, thermal, 60 m", "sitl_land.json"),
+            ("| land at night, thermal, 100 m", "sitl_land.json"),
         )
     ],
 ]

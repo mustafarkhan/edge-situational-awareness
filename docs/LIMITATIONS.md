@@ -12,6 +12,9 @@ What this project does not show yet, and where the model fails. Every failure be
   prompts §12) were measured with the earlier 3-5 epoch CPU models and have not been re-run. Life-saving appliances
   (the smallest sea class) are still essentially not detected (AP 0.019). Only YOLO11n has been trained; larger models
   and YOLO26 are untested.
+- **Thermal person/car confusion above 120 m.** The GPU thermal model labels most people as *car* in one held-out
+  group at 130 m at night (126 of 137). Inside the 115 m flight envelope it is better than the earlier model; above
+  it, it is not fit for a person search (README §10b).
 - **Two datasets, both small slices.** Land: VisDrone (Chinese cities). Sea: a 2,500-image training subset of
   SeaDronesSee (lakes and the North Sea, summer, mostly DJI cameras), images downscaled from 4K to 1920 px.
   Performance in Nordic winter, rough seas, at night or with thermal cameras is unknown.

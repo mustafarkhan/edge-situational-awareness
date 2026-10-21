@@ -12,7 +12,8 @@ camera angle for every image:
   5. a QGroundControl mission for an example 1 km x 0.5 km area
 
   python benchmarks/land_search.py --data configs/datasets/hituav.yaml
-Writes benchmarks/results/land_persons_test.csv, land_detection_curve.csv, land_detection_summary.json,
+Compare another model by altitude only: --model models/hit_y11n_ep5.pt --by-altitude-only.
+Writes benchmarks/results/land_detection_by_altitude_<model>.csv, land_persons_test.csv, land_detection_curve.csv, land_detection_summary.json,
 land_search_validation.csv, land_search_altitude.csv, land_search_example.json, docs/figures/land_search.png,
 samples/land_search_example.plan.
 """
@@ -67,18 +68,24 @@ def write_csv(path: Path, rows: list[dict]):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default=str(REPO / "configs/datasets/hituav.yaml"))
-    ap.add_argument("--model", default=str(REPO / "models/hit_y11n_ep5.pt"))
+    ap.add_argument("--model", default=str(REPO / "models/hit_y11n_640_gpu.pt"))
     ap.add_argument("--conf", type=float, default=0.25)
     ap.add_argument("--speed", type=float, default=10.0)
-    ap.add_argument("--cache", default=str(REPO / "outputs/preds_hituav_test_person_640.json"))
+    ap.add_argument("--cache", default=None, help="saved predictions (default: outputs/preds_hituav_<model>.json)")
+    ap.add_argument("--by-altitude-only", action="store_true",
+                    help="only write land_detection_by_altitude_<model>.csv (to compare models)")  # fmt: skip
     a = ap.parse_args()
 
     cfg = yaml.safe_load(Path(a.data).read_text())
     root = Path(cfg["path"])
     images = sorted((root / "images/test").glob("*.jpg"))
-    cache = Path(a.cache)
-    if cache.exists():
-        preds = json.loads(cache.read_text())
+    import hashlib
+
+    digest = hashlib.sha256(Path(a.model).read_bytes()).hexdigest()
+    cache = Path(a.cache or REPO / f"outputs/preds_hituav_{Path(a.model).stem}.json")
+    saved = json.loads(cache.read_text()) if cache.exists() else {}
+    if saved.get("model_sha256") == digest:  # predictions are reused only for the very same weights
+        preds = saved["preds"]
     else:
         from ultralytics import YOLO
 
@@ -87,11 +94,14 @@ def main():
             r = model.predict(str(p), imgsz=640, conf=0.05, verbose=False, device="cpu")[0]
             preds[p.name] = [[*b, s] for b, c, s in zip(r.boxes.xyxy.tolist(), r.boxes.cls.tolist(), r.boxes.conf.tolist()) if int(c) == PERSON]  # fmt: skip
         cache.parent.mkdir(parents=True, exist_ok=True)
-        cache.write_text(json.dumps(preds))
+        cache.write_text(json.dumps({"model_sha256": digest, "preds": preds}))
 
     rows, tp, fp = [], 0, 0
+    fp_by_alt: dict[int, list[int]] = {}  # altitude -> [images, false alarms]
     for p in images:
         night, alt, angle = p.stem.split("_")[:3]
+        fa = fp_by_alt.setdefault(int(alt), [0, 0])
+        fa[0] += 1
         gts = []
         for line in (root / "labels/test" / (p.stem + ".txt")).read_text().splitlines():
             c, cx, cy, bw, bh = map(float, line.split())
@@ -99,7 +109,11 @@ def main():
                 gts.append(((cx - bw / 2) * 640, (cy - bh / 2) * 512, (cx + bw / 2) * 640, (cy + bh / 2) * 512))
         for *b, s in preds.get(p.name, []):
             if s >= a.conf:
-                tp, fp = (tp + 1, fp) if any(iou(b, g) >= 0.3 for g in gts) else (tp, fp + 1)
+                if any(iou(b, g) >= 0.3 for g in gts):
+                    tp += 1
+                else:
+                    fp += 1
+                    fa[1] += 1
         for g in gts:
             best = max((s for *b, s in preds.get(p.name, []) if iou(b, g) >= 0.3), default=0.0)
             rows.append(
@@ -131,11 +145,34 @@ def main():
             )
     write_csv(R / "land_detection_curve.csv", curve_rows)
 
+    # by altitude, and inside / above the flight envelope (missions stay at or below MAX_PLAN_ALT_M)
+    alts = np.array([r["alt_m"] for r in rows])
+    groups = [(str(x), [x]) for x in sorted(fp_by_alt)]
+    groups += [(f"<={MAX_PLAN_ALT_M:g}", [x for x in fp_by_alt if x <= MAX_PLAN_ALT_M])]
+    groups += [(f">{MAX_PLAN_ALT_M:g}", [x for x in fp_by_alt if x > MAX_PLAN_ALT_M])]
+    by_alt = []
+    for name, sel in groups:
+        m = np.isin(alts, sel)
+        n_img = sum(fp_by_alt[x][0] for x in sel)
+        by_alt.append(
+            {
+                "alt_m": name,
+                "images": n_img,
+                "persons": int(m.sum()),
+                "recall": round(float(hit[m].mean()), 3) if m.any() else "",
+                "false_alarms_per_image": round(sum(fp_by_alt[x][1] for x in sel) / max(n_img, 1), 3),
+            }
+        )
+    write_csv(R / f"land_detection_by_altitude_{Path(a.model).stem}.csv", by_alt)
+    if a.by_altitude_only:
+        return
+
     # person size in metres: straight-down frames only, 25 deg lens
     nadir = [r for r in rows if r["angle_deg"] == 90]
     size = [r["px_input"] * 2 * r["alt_m"] * math.tan(math.radians(25.0 / 2)) / 640 for r in nadir]
     q = [round(float(x), 3) for x in np.percentile(size, [10, 25, 50, 75, 90])]
     summ = {
+        "model": Path(a.model).name,
         "persons": len(rows),
         "images": len(images),
         "conf": a.conf,
@@ -211,7 +248,7 @@ def main():
     )
     for i, r in enumerate(curve_rows):
         ax[0].text(i, r["p_detect"] + 0.01, r["persons"], ha="center", fontsize=7, color="#555")
-    ax[0].set(ylim=(0, 1), xlabel="person size at the model input (px)", ylabel="P(person gets a box), one frame",
+    ax[0].set(ylim=(0, 1.07), xlabel="person size at the model input (px)", ylabel="P(person gets a box), one frame",
               title=f"Thermal, 477 held-out test images (conf {a.conf}, IoU ≥ 0.3)")  # fmt: skip
     for (lens, _), col in zip(LENSES.items(), ("#ef6c00", "#42a5f5")):
         t = [r for r in table if r["lens"] == lens]
