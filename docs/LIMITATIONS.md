@@ -74,7 +74,9 @@ The ray intersection is now implemented (`src/esa/geo.py`); terrain is not.
   3 m share one alert.
 - **TAK:** UDP and plain TCP only; no TLS / client certificates (port 8089), no data packages, no CoT acknowledgement.
   Tested against an open-source TAK server (taky) in CI, not against ATAK on a phone in the field.
-- **Operator decisions are not authenticated**; anyone who can reach the ground-station WebSocket can confirm or reject.
+- **Links not yet secured:** operators authenticate to the ground station with tokens (README §11), but the ROS 2
+  topics run without SROS2 (anyone on the drone's network can publish frames or read detections) and MAVLink is
+  unsigned. Keep both on an isolated, encrypted link until that changes.
 
 ## Observed failures
 
