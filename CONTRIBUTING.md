@@ -35,3 +35,9 @@ or in the field) are described as not yet measured.
 GitHub Actions are pinned to full commit SHAs (the version is in a comment), every workflow runs with read-only
 repository access, and `zizmor` checks the workflow files in CI. Dependabot proposes weekly updates as pull requests;
 they go through the same checks as any other change. Model files are checked against `models/SHA256SUMS`.
+
+## Releases
+
+Add `docs/releases/vX.Y.Z.md` (release notes) and date the changelog section in a pull request. After it is merged,
+tag the merge commit `vX.Y.Z` and push the tag: the Release workflow verifies the model checksums and publishes the
+release with the models and project videos attached.

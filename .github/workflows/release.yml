@@ -1,0 +1,31 @@
+name: Release
+
+# Pushing a tag vX.Y.Z publishes a GitHub release: notes from docs/releases/vX.Y.Z.md, the shipped models with their
+# checksums, and the project videos. The models are verified against models/SHA256SUMS first.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Publish the release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # create the release and upload its files
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Verify the model files
+        run: cd models && sha256sum -c SHA256SUMS
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          test -f "docs/releases/$TAG.md" || { echo "missing docs/releases/$TAG.md"; exit 1; }
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file "docs/releases/$TAG.md" \
+            models/*.pt models/SHA256SUMS docs/video/project_video.mp4 docs/video/project_video_short.mp4

@@ -15,7 +15,7 @@ step "ruff lint"            ruff check .
 step "ruff format"          ruff format --check .
 step "unit tests"           python -m pytest -q
 step "README numbers"       python benchmarks/check_readme.py
-step "workflow files"       actionlint .github/workflows/ci.yml .github/workflows/ros2.yml .github/workflows/sitl.yml
+step "workflow files"       actionlint .github/workflows/ci.yml .github/workflows/ros2.yml .github/workflows/sitl.yml .github/workflows/release.yml
 step "workflow security"    zizmor --offline .github/workflows
 step "shell scripts"        bash -c 'shellcheck -S warning scripts/*.sh scripts/kaggle/*.sh ros2_ws/*.sh benchmarks/*.sh'
 step "no stray files"       bash -c '[ -z "$(git status --porcelain --untracked-files=all | grep "^??")" ]'
