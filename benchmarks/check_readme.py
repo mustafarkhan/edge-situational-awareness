@@ -155,6 +155,32 @@ CLAIMS: list[tuple[str, list[str]]] = [
         )
         for clip in ("DJI_0055", "DJI_0059", "DJI_0057", "DJI_0001_d3")
     ],
+    *[
+        (
+            f"| {clip} | {m} m/frame |",
+            [
+                v("tracking_sea.csv", {"tag": f"sea_{clip}_bytetrack_gpu"}, c, f)
+                for c, f in (("IDF1", "{:.3f}"), ("id_switches", "{:.0f} |"))
+            ],
+        )
+        for clip, m in (("DJI_0055", "0.09"), ("DJI_0059", "0.14"), ("DJI_0057", "0.08"), ("DJI_0001_d3", "0.01"))
+    ],
+    (
+        "20 of 24 swimmers alerted instead of 17",
+        [
+            v(f, {"clip": "all", "dedupe_radius_m": 3}, c, "{:.0f}")
+            for f in ("alert_load_gpu.csv", "alert_load.csv")
+            for c in ("unique_swimmers_alerted", "alerts")
+        ]
+        + [v("alert_load_gpu.csv", {"clip": "all", "dedupe_radius_m": 3}, "labelled_swimmers", "of {:.0f}")],
+    ),
+    (
+        "so only 1 of 8 raised a swimmer alert",
+        [
+            v(f, {"clip": "DJI_0057", "dedupe_radius_m": 3}, "unique_swimmers_alerted", "{:.0f} of 8")
+            for f in ("alert_load.csv", "alert_load_gpu.csv")
+        ],
+    ),
     # real geolocation
     *[
         (

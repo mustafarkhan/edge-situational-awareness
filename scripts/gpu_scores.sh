@@ -3,6 +3,7 @@
 # models, so every row is comparable. The test images were never on Kaggle: the notebook downloads only train/val.
 #
 #   GPU=/path/to/esa_gpu bash scripts/gpu_scores.sh      # the unzipped esa_gpu_results.zip
+#   MOT=outputs/sea_mot GPU=... bash scripts/gpu_scores.sh  # also tracking and alerts on the real sea clips
 set -euo pipefail
 cd "$(dirname "$0")/.."
 GPU=${GPU:?set GPU to the unzipped esa_gpu folder}
@@ -32,4 +33,21 @@ $T --model "$H" --split test --name-filter "." --subset all --tag gpu_y11n_640_t
 $T --model "$H" --split test --name-filter "^0_" --subset day --tag gpu_y11n_640_test_day "${SHARED[@]}"
 $T --model "$H" --split test --name-filter "^1_" --subset night --tag gpu_y11n_640_test_night "${SHARED[@]}"
 $T --model "$H" --split seen --name-filter "." --subset all --tag gpu_y11n_640_seen "${SHARED[@]}"
+
+if [ -n "${MOT:-}" ]; then  # prepared SeaDronesSee-MOT clips (scripts/sea_experiments.sh, step 3)
+  echo "== tracking and alerts on 4 real sea clips, shipped GPU model"
+  RUNS=${RUNS:-outputs/gpu_track}
+  mkdir -p "$RUNS"
+  for c in DJI_0055 DJI_0059 DJI_0057 DJI_0001_d3; do
+    for n in bytetrack botsort; do
+      python tools/detect_video.py --model models/sds_y11n_1280_gpu.pt --source "$MOT/$c/frames" --imgsz 1280 \
+        --conf 0.1 --tracker $n.yaml --telemetry "$MOT/$c/telemetry.jsonl" --alert swimmer --alert-min-frames 15 \
+        --out "$RUNS/sea_track_${c}_${n}.jsonl"
+      python benchmarks/tracking_eval.py --flight "$MOT/$c" --run "$RUNS/sea_track_${c}_${n}.jsonl" \
+        --tag "sea_${c}_${n}_gpu" --tracker $n --out benchmarks/results/tracking_sea.csv
+    done
+  done
+  python benchmarks/alert_load.py --clips "$MOT"/DJI_0055 "$MOT"/DJI_0059 "$MOT"/DJI_0057 "$MOT"/DJI_0001_d3 \
+    --runs "$RUNS" --out benchmarks/results/alert_load_gpu.csv
+fi
 echo GPU_SCORES_DONE

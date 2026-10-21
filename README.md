@@ -275,19 +275,22 @@ Longer training memorises more: the GPU model's swimmer AP is 0.371 on seen vide
 against +0.110 for the 4-epoch model).
 
 **Tracking on real footage.** Four SeaDronesSee-MOT clips (not used for training; 143–285 frames each, 30 fps,
-8.6–50 m altitude), fine-tuned model at 1280 px, confidence 0.1. Source [`tracking_sea.csv`](benchmarks/results/tracking_sea.csv).
+8.6–50 m altitude), 1280 px, confidence 0.1. The first two result columns use the 4-epoch model, the last the
+GPU-trained one. Source [`tracking_sea.csv`](benchmarks/results/tracking_sea.csv).
 
-| clip | camera motion | ByteTrack IDF1 / switches | BoT-SORT + GMC IDF1 / switches |
-|---|---|---|---|
-| DJI_0055 | 0.09 m/frame | 0.501 / 46 | 0.478 / 40 |
-| DJI_0059 | 0.14 m/frame | **0.785 / 4** | 0.784 / 10 |
-| DJI_0057 | 0.08 m/frame | 0.662 / 3 | 0.648 / 2 |
-| DJI_0001_d3 | 0.01 m/frame | 0.767 / 7 | 0.708 / 7 |
+| clip | camera motion | ByteTrack IDF1 / switches | BoT-SORT + GMC IDF1 / switches | GPU model, ByteTrack |
+|---|---|---|---|---|
+| DJI_0055 | 0.09 m/frame | 0.501 / 46 | 0.478 / 40 | 0.507 / 14 |
+| DJI_0059 | 0.14 m/frame | 0.785 / 4 | 0.784 / 10 | 0.817 / 5 |
+| DJI_0057 | 0.08 m/frame | 0.662 / 3 | 0.648 / 2 | 0.507 / 13 |
+| DJI_0001_d3 | 0.01 m/frame | 0.767 / 7 | 0.708 / 7 | 0.730 / 14 |
 
 ![Tracking swimmers and boats on real clip DJI_0059](docs/figures/sea_tracking.jpg)
 
 At 30 fps the camera moves 0.01–0.14 m per frame, the "slow" regime of the simulation in §3, where camera-motion
 compensation barely matters. The real footage agrees. DJI_0055 is hardest: 15 swimmers bunched together, 20 m up.
+The GPU model tracks better on two clips and worse on two; these scores ignore the class, and what changed most is
+the class (§11: more swimmers get a *swimmer* alert).
 
 **Geolocation on real flight logs.** The MOT clips come with the drone's GPS, altitude and gimbal angles, but no
 ground-truth positions for the swimmers. The test: a swimmer drifts at most about 1 m/s, so a good geolocation
@@ -430,7 +433,13 @@ is now treated as the same swimmer ([`benchmarks/alert_load.py`](benchmarks/aler
 | 5 m | 14 | 14 (3 lost) | 0 | 0 |
 
 3 m removes **45% of alerts without losing a swimmer**; 5 m starts merging swimmers who are close together. The
-radius was chosen on these four clips, so treat it as a starting value.
+radius was chosen on these four clips, so treat it as a starting value. The table uses the 4-epoch model.
+
+**With the GPU-trained model** (same clips, 3 m, [`alert_load_gpu.csv`](benchmarks/results/alert_load_gpu.csv)):
+20 of 24 swimmers alerted instead of 17, for 27 alerts instead of 18 (4 duplicates, 3 false).
+Most of the gain is clip DJI_0057, eight swimmers (most in life jackets) filmed from 9 m: the 4-epoch model called most of
+them boats, so only 1 of 8 raised a swimmer alert; the GPU model alerts on 5 of 8. The price is more alerts for the
+operator to review, which is what the review loop is for.
 
 **TAK (ATAK / WinTAK / TAK Server).** [`src/esa/cot.py`](src/esa/cot.py) sends Cursor-on-Target messages. Each alert
 becomes a marker (`a-u-S`, unknown object on the sea surface, for swimmers and boats; `a-u-G`, unknown on the ground,
