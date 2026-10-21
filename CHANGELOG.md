@@ -1,6 +1,6 @@
 # Changelog
 
-## v3.0.0-dev — towards field tests on real drones
+## v3.0.0 — 2026-10-21 — GPU-trained models, flight safety, secure ground station, towards field tests
 
 - **Project video** (`docs/video/project_video.mp4`, 2.5 min; `--short` for a 1-minute cut): detection results
   before and after GPU training, the sea and land plans flown in SITL, safety, sea tracking, thermal and land
