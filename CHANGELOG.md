@@ -2,6 +2,10 @@
 
 ## v3.0.0-dev — towards field tests on real drones
 
+- **Sea tracking and alerts with the GPU model** on the four real SeaDronesSee-MOT clips: 20 of 24 swimmers get a
+  swimmer alert instead of 17 (27 alerts instead of 18). On DJI_0057 the 4-epoch model called most swimmers boats
+  (1 of 8 alerted); the GPU model alerts on 5 of 8. Class-agnostic tracking scores are mixed (IDF1 up on two clips,
+  down on two). `alert_load.py --out`; `scripts/gpu_scores.sh` reproduces it with `MOT=`
 - **Land search planning re-run with the GPU thermal model:** inside the 115 m flight envelope it finds 91% of people at
   0.40 false alarms per image (5-epoch model: 90% at 1.01), but above it, at 130 m at night, it labels most people
   *car*. The planner's size curve takes that in, so the example mission is more conservative: 25° lens at 100 m,

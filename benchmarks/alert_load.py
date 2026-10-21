@@ -41,6 +41,7 @@ def main():
     ap.add_argument("--runs", required=True, help="folder with sea_track_<clip>_<tracker>.jsonl")
     ap.add_argument("--tracker", default="bytetrack")
     ap.add_argument("--min-frames", type=int, default=15)
+    ap.add_argument("--out", default=str(REPO / "benchmarks/results/alert_load.csv"))
     a = ap.parse_args()
 
     rows = []
@@ -91,7 +92,7 @@ def main():
                 "alerts_per_swimmer_found": round(tot["alerts"] / max(tot["unique_swimmers_alerted"], 1), 2),
             }
         )
-    out = REPO / "benchmarks/results/alert_load.csv"
+    out = Path(a.out)
     with out.open("w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=list(rows[0]))
         w.writeheader()
