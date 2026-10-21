@@ -37,5 +37,10 @@ the 5-epoch model did (+0.003).
 
 ## Limitations
 One thermal camera model and region; flight groups are inferred from file names, so held-out groups may share
-locations with training groups (README §13). Not tested on water: HIT-UAV is land scenes only. The land search plans
-in README §10b were measured with the earlier 5-epoch model and have not yet been re-run with this one.
+locations with training groups (README §13). Not tested on water: HIT-UAV is land scenes only.
+
+**Person/car confusion above 120 m.** In one held-out group (night, 130 m, camera at 80°) the model puts tight boxes on
+126 of 137 people but labels them *car*; the 5-epoch model labelled them *person*. Inside the ≤ 115 m flight envelope
+it finds 91% of people at 0.40 false alarms per image (5-epoch model: 90% at 1.01). Search alerts on *person* only, so
+do not fly this model above 120 m for a person search. The land search plan (README §10b) uses this model's measured
+curve, which this group makes conservative.

@@ -2,6 +2,12 @@
 
 ## v3.0.0-dev — towards field tests on real drones
 
+- **Land search planning re-run with the GPU thermal model:** inside the 115 m flight envelope it finds 91% of people at
+  0.40 false alarms per image (5-epoch model: 90% at 1.01), but above it, at 130 m at night, it labels most people
+  *car*. The planner's size curve takes that in, so the example mission is more conservative: 25° lens at 100 m,
+  0.77 km²/h, 40.8 min for 0.5 km² (was 45° at 60 m, 32.5 min), flown in SITL to landing (48/48 waypoints).
+  `benchmarks/land_search.py` now caches predictions per model (by SHA-256; it previously reused a cache made with
+  another model) and writes detection by altitude
 - **GPU-trained models:** sea, thermal and land detectors trained for 60-120 epochs on Kaggle (2× T4) and scored with
   the same scripts on the same held-out sets (`scripts/gpu_scores.sh`): sea AP 0.266 → 0.325 (swimmer 0.185 → 0.222),
   thermal 0.445 → 0.512, land (VisDrone val) 0.253 → 0.336, and 67% instead of 54% of objects found in the two

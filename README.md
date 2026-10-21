@@ -42,11 +42,11 @@ the script and results file that produced it.
 | **At sea:** does the land recipe transfer? | Yes. Swimmer AP **0.027 → 0.222** (COCO 640 → GPU-trained at 1280); boats 0.155 → 0.562 |
 | Can the official sea validation split be trusted? | No. It shares videos with train and **inflates swimmer AP by ~50%** (0.185 → 0.295), measured against a control |
 | Does tracking hold on real sea footage? | IDF1 **0.50–0.79** on 4 real clips; GMC makes no difference at these slow camera speeds (as the simulation predicts) |
-| **v2:** how high should a search drone fly? | At sea by day: ~5× more sea per hour at 100 m than at 20 m, 0.95 detection per pass, ~1 frame/s is enough. On land at night (thermal): ~1 km²/h, and the lens sets the altitude (§10) |
+| **v2:** how high should a search drone fly? | At sea by day: ~5× more sea per hour at 100 m than at 20 m, 0.95 detection per pass, ~1 frame/s is enough. On land at night (thermal): ~0.8 km²/h, and the lens sets the altitude (§10) |
 | **v2:** can operators cope with the alerts? | Spatial de-duplication cuts alerts 45% (33 → 18) without losing a swimmer; alerts go to ATAK via Cursor on Target (§11) |
 | **v2:** can text prompts replace training? | No: a 4-epoch fine-tune still beats a 3× larger open-vocabulary model by 1.6× on swimmers (§12) |
 | **v2:** what about night? | Thermal: colour-trained AP 0.023 → GPU-trained **0.512**; better at night (0.525) than by day (0.453) (§13) |
-| **v3:** do the planned searches fly? | In ArduPilot SITL, yes: all **14/14** (sea) and **36/36** (land) search waypoints reached, tracks within **0.91 m / 1.10 m** of the plan, never outside the geofence (§14) |
+| **v3:** do the planned searches fly? | In ArduPilot SITL, yes: all **14/14** (sea) and **48/48** (land) search waypoints reached, tracks within **0.91 m / 1.15 m** of the plan, never outside the geofence (§14) |
 | Does tilt-aware geolocation help on real flights? | Better on 3 of 4 real clips (best: swimmer drift **3.2 → 1.0 m/s**). Worse on the fourth, whose attitude log disagrees with the video |
 
 ## Try it (no dataset download, about 5 minutes on a laptop CPU)
@@ -371,29 +371,43 @@ plan. These are listed in [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 ### 10b. On land, at night (thermal camera, a missing person)
 
 The same method on the thermal test set (§13), which records altitude and camera angle for every image
-([`benchmarks/land_search.py`](benchmarks/land_search.py)). The thermal model puts a box on **91%** of the 1,255
-people in the 477 held-out images (93% at night, 86% by day), with 75% precision and 0.9 false alarms per image.
-People measure 0.94 m (median box in 130 straight-down frames). Predicted pixel size and detection rate match the
-measurements at 80 m and 120 m within 2 px and 0.03 ([`land_search_validation.csv`](benchmarks/results/land_search_validation.csv)).
-No land video with identities is available to measure look correlation, so each pass counts as **one look**
-(conservative).
+([`benchmarks/land_search.py`](benchmarks/land_search.py)), with the GPU-trained thermal model (§13). It puts a box
+labelled *person* on **82%** of the 1,255 people in the 477 held-out images (80% at night, 90% by day), at **88%
+precision and 0.32 false alarms per image** (the 5-epoch model: 91%, 75%, 0.91).
+
+**Inside the flight envelope (≤ 115 m) it is better on both counts:**
+91% of people found at 0.40 false alarms per image, against 90% at 1.01 for the 5-epoch model
+([`land_detection_by_altitude_hit_y11n_640_gpu.csv`](benchmarks/results/land_detection_by_altitude_hit_y11n_640_gpu.csv),
+[`…_hit_y11n_ep5.csv`](benchmarks/results/land_detection_by_altitude_hit_y11n_ep5.csv)). The overall drop comes from
+one held-out group above the envelope (night, 130 m, camera at 80°): the model puts tight boxes on 126 of its 137 people
+but labels them *car*, where the 5-epoch model said *person*. At 9-13 px a person and a car are both small warm blobs.
+
+People measure 0.94 m (median box in 130 straight-down frames). The planner predicts detection from pixel size alone,
+so the 130 m group pulls down the curve for small people and the plan flies lower than it needs to. The validation
+shows it: at 80 m the prediction matches (0.90 against 0.89 measured), at 120 m it predicts 0.59 where 0.98 is
+measured ([`land_search_validation.csv`](benchmarks/results/land_search_validation.csv)). The plan errs on the safe
+side, but pixel size alone no longer explains this detector. No land video with identities is available to measure
+look correlation, so each pass counts as **one look** (conservative).
 
 ![Thermal: detection vs size, and ground searched per hour vs altitude](docs/figures/land_search.png)
 
 | thermal lens (640×512 sensor) | best altitude inside the data, ≤ 115 m | person | P(detect) per pass | ground searched per hour at 80% POD |
 |---|---|---|---|---|
-| 25° (25 mm, the HIT-UAV camera) | 110 m | 12 px | 0.90 | 0.98 km² |
-| 45° (13 mm) | 60 m | 12 px | 0.89 | **0.99 km²** |
+| 25° (25 mm, the HIT-UAV camera) | 100 m | 14 px | 0.77 | **0.77 km²** |
+| 45° (13 mm) | 60 m | 12 px | 0.67 | 0.74 km² |
 
 ([`land_search_altitude.csv`](benchmarks/results/land_search_altitude.csv))
 
 - **Choosing the lens is choosing the altitude.** The wide lens sees more ground but runs out of pixels at 77 m. The
-  narrow lens could fly to 143 m before it does, but missions stay 5 m under the EU 120 m ceiling (§14), and at 110 m
-  it searches 0.98 km² per hour against the wide lens's 0.99 at 60 m: the same, within the precision of the model.
-- **Land at night is slower than sea by day:** about 1 km² per hour against 2.7, because a 640-pixel thermal sensor
+  narrow lens could fly to 143 m before it does; missions stay 5 m under the EU 120 m ceiling (§14). With this
+  detector the narrow lens at 100 m wins: 0.77 km² per hour against 0.74 for the wide lens at 60 m.
+- **Land at night is slower than sea by day:** about 0.8 km² per hour against 2.7, because a 640-pixel thermal sensor
   has fewer pixels than a 4K colour camera.
-- Example mission: [`samples/land_search_example.plan`](samples/land_search_example.plan): 0.5 km², 45° lens at 60 m,
-  19 tracks 27.5 m apart, 19.5 km, 32.5 min. Open ground only: thermal cannot see through tree canopy.
+- Example mission: [`samples/land_search_example.plan`](samples/land_search_example.plan): 0.5 km², 25° lens at 100 m,
+  24 tracks 21.3 m apart, 24.5 km, 40.8 min (with the 5-epoch model's curve: 45° lens at 60 m, 32.5 min). Open ground
+  only: thermal cannot see through tree canopy.
+- **Next:** a size check (a "car" a few pixels across, at a known altitude and lens, cannot be a car) or more night
+  training data above 120 m. Neither is tested yet.
 
 ## 11. Operator in the loop: review, de-duplication, TAK (v2)
 
@@ -539,7 +553,7 @@ software-in-the-loop simulator and flies both example missions as whole sorties,
 | mission | search waypoints reached | distance from the planned track (median / max) | positions outside the geofence | highest altitude | landed |
 |---|---|---|---|---|---|
 | sea, 100 m, 0.5 km² (§10a) | 14/14 | 0.01 m / 0.91 m | 0 | 100.0 m | yes |
-| land at night, thermal, 60 m, 0.5 km² (§10b) | 38/38 | 0.01 m / 1.11 m | 0 | 60.0 m | yes |
+| land at night, thermal, 100 m, 0.5 km² (§10b) | 48/48 | 0.01 m / 1.15 m | 0 | 100.0 m | yes |
 
 [`benchmarks/results/sitl_sea.json`](benchmarks/results/sitl_sea.json),
 [`sitl_land.json`](benchmarks/results/sitl_land.json). The first attempt failed usefully: ArduPilot's default

@@ -300,6 +300,19 @@ Small-object AP is the metric that matters; overall mAP hides the problem.
 - **Conclusion:** keep; GPU sea and thermal models become the defaults. Longer training memorises training scenery
   more, so the leakage-controlled test sets matter more, not less. Re-run §10 planning with the new models next.
 
+### 2026-10-21 — land planning with the GPU thermal model
+- **Bug found first:** `land_search.py` cached predictions in one file whatever the model, so a new model would have
+  silently reused the old model's predictions. The cache is now keyed by the model's SHA-256.
+- **Result:** person boxes on 82% of 1,255 test people (5-epoch: 91%), precision 88% (75%), false alarms 0.32 per
+  image (0.91). By altitude: at <= 115 m 91% at 0.40 FA/image vs 90% at 1.01; at 130 m (one group, night, 80 deg)
+  43% vs 95%. Class-agnostic, the GPU model still boxes 93% of people; in that group 126 of 137 are labelled car.
+- **Plan:** size-only curve, unchanged method: 25 deg lens at 100 m, 0.77 km^2/h (was 45 deg at 60 m, 0.99 km^2/h).
+  Validation: 80 m predicted 0.90 vs measured 0.89; 120 m predicted 0.59 vs measured 0.98, i.e. conservative.
+  Fitting only <= 115 m frames was tried as a check, not adopted (it would change the method after seeing the test
+  data); it still predicts 0.71 at 120 m.
+- **SITL:** new land plan flown to landing, 48/48 waypoints, max cross-track 1.15 m, max altitude 100 m.
+- **Next:** size-plausibility check for "car" boxes, or night data above 120 m; validate either on val, not test.
+
 ---
 
 ## Template
