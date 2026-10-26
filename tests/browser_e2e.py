@@ -13,6 +13,7 @@ Checks, against the real built app:
 from __future__ import annotations
 
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -152,8 +153,17 @@ def main() -> int:
             pr.terminate()
     for name, ok in checks.items():
         print(f"{'OK  ' if ok else 'FAIL'} {name}")
+        if not ok and os.environ.get("GITHUB_ACTIONS"):  # an annotation: readable without the full job log
+            print(f"::error title=Browser end to end::{name}")
     return 0 if checks and all(checks.values()) else 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception as e:  # a timeout or crash: name it in an annotation too
+        if os.environ.get("GITHUB_ACTIONS"):
+            print(
+                f"::error title=Browser end to end::{type(e).__name__}: {str(e).splitlines()[0][:300] if str(e) else ''}"
+            )
+        raise
