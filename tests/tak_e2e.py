@@ -137,4 +137,9 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception as e:  # a timeout or crash before the checks: name it in an annotation too
+        if os.environ.get("GITHUB_ACTIONS"):
+            print(f"::error title=TAK end to end::{type(e).__name__}: {str(e).splitlines()[0][:300] if str(e) else ''}")
+        raise

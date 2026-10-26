@@ -163,5 +163,7 @@ if __name__ == "__main__":
         sys.exit(main())
     except Exception as e:  # a timeout or crash: name it in an annotation too
         if os.environ.get("GITHUB_ACTIONS"):
-            print(f"::error title=Browser end to end::{type(e).__name__}: {str(e).splitlines()[0][:300]}")
+            print(
+                f"::error title=Browser end to end::{type(e).__name__}: {str(e).splitlines()[0][:300] if str(e) else ''}"
+            )
         raise
