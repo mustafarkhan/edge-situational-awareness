@@ -1,5 +1,11 @@
 # Changelog
 
+## v3.1.0-dev
+
+- **Kaggle round 2** (`docs/KAGGLE.md`): YOLO11s and YOLO26n on sea (1280 px) and thermal, and thermal at 1280 px
+  input; one change per run against round 1. `run_kaggle.sh` maps each stage to its config and downloads the
+  pretrained weights each config starts from
+
 ## v3.0.0 — 2026-10-21 — GPU-trained models, flight safety, secure ground station, towards field tests
 
 - **Project video** (`docs/video/project_video.mp4`, 2.5 min; `--short` for a 1-minute cut): detection results
