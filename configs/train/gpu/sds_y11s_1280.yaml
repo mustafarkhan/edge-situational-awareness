@@ -1,0 +1,17 @@
+# GPU run (Kaggle T4 / rented GPU), scripts/kaggle/run_kaggle.sh. Same data and split as the CPU run, more epochs.
+# Validation every epoch on the val split (never test) picks best.pt; patience stops early when val stops improving.
+# Round 2: YOLO11s (9.4 M parameters, 3.6x YOLO11n) with the same data, input size and recipe.
+model: weights/yolo11s.pt
+data: configs/datasets/seadronessee.yaml
+imgsz: 1280
+epochs: 60
+patience: 25
+batch: 8
+workers: 4
+cache: ram
+cos_lr: true
+close_mosaic: 10
+plots: true
+project: runs/gpu
+name: sds_y11s_1280
+exist_ok: true

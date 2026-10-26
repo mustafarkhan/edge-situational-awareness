@@ -43,6 +43,22 @@ the same held-out sets as before (`scripts/gpu_scores.sh`, README §2, §9, §13
 | `land` | VisDrone train minus the 2 held-out sequences (5,703 / 548) | YOLO11n, 640 px | 80 | 2-3 h |
 | `sea1280` | SeaDronesSee, trained at 1280 px (tiny swimmers) | YOLO11n, 1280 px | 60 | 2-3 h |
 
+### Round 2: bigger model, YOLO26, thermal at 1280 px
+
+Same data, splits, seed and recipe as round 1; one thing changes per run, so each result answers one question.
+The notebook's default `STAGES` is this round.
+
+| stage | run | the one change vs round 1 | approx. T4 time |
+|---|---|---|---|
+| `thermal_y11s` | `hit_y11s_640` | YOLO11s (3.6x the parameters) | 1 h |
+| `sea1280_y11s` | `sds_y11s_1280` | YOLO11s | 2.5-3 h |
+| `sea1280_y26n` | `sds_y26n_1280` | YOLO26n instead of YOLO11n | 1 h |
+| `thermal_y26n` | `hit_y26n_640` | YOLO26n instead of YOLO11n | 0.5 h |
+| `thermal1280` | `hit_y11n_1280` | thermal frames upscaled to 1280 px input | 1.5-2 h |
+
+A bigger model is slower on the Jetson, so a gain only counts if it is worth its cost in milliseconds; that is
+measured when the models are scored.
+
 Stages run in that order; if fewer than 45 minutes of the 10.5-hour budget remain, later stages are skipped. Each
 finished stage is added to the zip immediately, so a session that stops early still leaves results. Kaggle's free
 GPU quota is about 30 hours a week (Kaggle does not publish an exact figure), and one full run uses about a third of it.

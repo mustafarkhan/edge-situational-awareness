@@ -1,0 +1,17 @@
+# GPU run (Kaggle T4 / rented GPU), scripts/kaggle/run_kaggle.sh. Same data and split as the CPU run, more epochs.
+# Validation every epoch on the val split (never test) picks best.pt; patience stops early when val stops improving.
+# Round 2: YOLO26n instead of YOLO11n, same data, input size and recipe.
+model: weights/yolo26n.pt
+data: configs/datasets/hituav.yaml
+imgsz: 640
+epochs: 120
+patience: 25
+batch: 32
+workers: 4
+cache: ram
+cos_lr: true
+close_mosaic: 10
+plots: true
+project: runs/gpu
+name: hit_y26n_640
+exist_ok: true
