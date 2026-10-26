@@ -11,7 +11,8 @@ permissions:
 jobs:
   python:
     name: Lint and unit tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
@@ -35,7 +36,8 @@ jobs:
 
   tak:
     name: TAK end to end (real TAK server)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
@@ -52,7 +54,8 @@ jobs:
 
   quickstart:
     name: README quick start on the sample clip
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
@@ -82,7 +85,8 @@ jobs:
 
   frontend:
     name: Build the map app
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: web/frontend
@@ -100,7 +104,8 @@ jobs:
 
   browser:
     name: Operator map in a real browser (auth, XSS, CSP)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
@@ -115,7 +120,7 @@ jobs:
           cache-dependency-path: web/frontend/package-lock.json
       - name: Install the server and a headless browser
         run: |
-          pip install fastapi "uvicorn[standard]" playwright && pip install -e .
+          pip install fastapi "uvicorn[standard]" playwright==1.56.0 && pip install -e .
           python -m playwright install --with-deps chromium
       - name: Build the map app
         working-directory: web/frontend
