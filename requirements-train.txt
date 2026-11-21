@@ -2,7 +2,7 @@
 # ultralytics 8.4.174, sahi 0.12.8, torch 2.14.1, onnxruntime 1.29.0, motmetrics 1.4.0, Python 3.13.
 ultralytics>=8.3
 sahi>=0.11
-pycocotools>=2.0.7
+pycocotools>=2.0.11
 onnx
 onnxslim
 onnxruntime          # INT8 quantisation and ONNX evaluation on CPU

@@ -2,7 +2,7 @@
 ultralytics>=8.3
 onnx
 onnxslim
-pycocotools>=2.0.7
+pycocotools>=2.0.11
 pandas
 tabulate
 lap                  # tracking
